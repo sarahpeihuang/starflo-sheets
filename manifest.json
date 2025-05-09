@@ -1,19 +1,20 @@
 {
-    "manifest_version": 3,
-    "name": "Google Sheets Quickbar",
-    "version": "1.0",
-    "permissions": ["storage", "scripting", "activeTab", "contextMenus"],
-    "action": {
-      "default_popup": "popup.html"
-    },
-    "background": {
-      "service_worker": "background.js"
-    },
-    "content_scripts": [
-      {
-        "matches": ["https://docs.google.com/spreadsheets/*"],
-        "js": ["content.js"]
-      }
-    ]
-  }
-  
+  "manifest_version": 3,
+  "name": "Google Sheets Quickbar",
+  "version": "1.0",
+  "permissions": ["storage", "scripting", "activeTab", "contextMenus"],
+  "host_permissions": ["https://docs.google.com/spreadsheets/*"],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://docs.google.com/spreadsheets/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"]
+    }
+  ]
+}

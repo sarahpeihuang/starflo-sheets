@@ -1,16 +1,96 @@
-// injects a floating toolbar into Google Sheets
-function createToolbar() {
-    const bar = document.createElement('div');
-    bar.id = 'quickbar';
-    bar.style.position = 'fixed';
-    bar.style.top = '100px';
-    bar.style.right = '20px';
-    bar.style.background = '#fff';
-    bar.style.border = '1px solid #ccc';
-    bar.style.padding = '10px';
-    bar.style.zIndex = 9999;
-    bar.innerHTML = '<b>⭐ Quickbar</b><br>(Add buttons here)';
-    document.body.appendChild(bar);
+// content.js
+function simulateClick(el) {
+  el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+  el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+  el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+}
+
+function findVisibleElementByText(text, index) {
+  const elements = Array.from(document.querySelectorAll('[role="menuitem"]'));
+
+  return elements.find(el => {
+    if (el.offsetParent === null) return false;
+
+    // Top-level menu (e.g., Format, Insert)
+    if (index === 0) {
+      return el.textContent.trim().toLowerCase() === text.toLowerCase();
+    }
+
+    // Submenus (e.g., Theme, Chart)
+    const inner = el.querySelector('.goog-menuitem-content');
+    return inner?.textContent.trim().toLowerCase() === text.toLowerCase();
+  });
+}
+
+
+function triggerMenuPath(path) {
+  const labels = path.split(' > ').map(l => l.trim());
+  let attempts = 0;
+
+  function open(index) {
+    const label = labels[index];
+    const el = findVisibleElementByText(label, index);
+
+    if (el) {
+      simulateClick(el);
+      if (index < labels.length - 1) {
+        setTimeout(() => open(index + 1), 400);
+      }
+    } else if (attempts < 10) {
+      attempts++;
+      setTimeout(() => open(index), 400);
+    } else {
+      alert(`Could not find "${label}" menu item.`);
+    }
   }
-  
-  window.addEventListener('load', createToolbar);
+
+  open(0);
+}
+
+function createToolbar() {
+  const bar = document.createElement('div');
+  bar.id = 'quickbar';
+  bar.style.position = 'fixed';
+  bar.style.top = '100px';
+  bar.style.right = '20px';
+  bar.style.background = '#fff';
+  bar.style.border = '1px solid #ccc';
+  bar.style.padding = '10px';
+  bar.style.zIndex = 9999;
+  bar.innerHTML = `
+    <b>⭐ Quickbar</b>
+    <button id="triggerTheme" style="display:block; margin:8px 0; background:#4285f4; color:#fff; border:none; border-radius:4px; padding:6px 12px; cursor:pointer;">Format > Theme</button>
+    <input type="text" id="functionSearch" placeholder="Search functions..." style="display:block; margin-top:5px; width:160px;">
+    <div id="quickbar-buttons"></div>
+  `;
+  document.body.appendChild(bar);
+
+  document.getElementById('triggerTheme').onclick = function () {
+    triggerMenuPath("Format > Theme");
+  };
+
+  const input = document.getElementById('functionSearch');
+  input.addEventListener('input', (e) => {
+    const query = e.target.value.toLowerCase();
+    const allButtons = document.querySelectorAll('#quickbar-buttons button');
+    allButtons.forEach(btn => {
+      btn.style.display = btn.innerText.toLowerCase().includes(query) ? 'block' : 'none';
+    });
+  });
+
+  chrome.storage.local.get("pinnedFunctions", (data) => {
+    const buttons = data.pinnedFunctions || [];
+    const container = document.getElementById("quickbar-buttons");
+    container.innerHTML = '';
+    buttons.forEach((func) => {
+      const btn = document.createElement("button");
+      btn.innerText = func;
+      btn.style.display = "block";
+      btn.style.margin = "5px 0";
+      btn.onclick = () => triggerMenuPath(func);
+      container.appendChild(btn);
+    });
+  });
+}
+
+window.addEventListener('load', createToolbar);
