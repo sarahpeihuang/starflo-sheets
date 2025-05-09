@@ -22,7 +22,6 @@ function findVisibleElementByText(text, index) {
   });
 }
 
-
 function triggerMenuPath(path) {
   const labels = path.split(' > ').map(l => l.trim());
   let attempts = 0;
@@ -35,6 +34,40 @@ function triggerMenuPath(path) {
       simulateClick(el);
       if (index < labels.length - 1) {
         setTimeout(() => open(index + 1), 400);
+      } else {
+        // final item: trigger Enter key
+        setTimeout(() => {
+          const finalLabel = labels[index].toLowerCase();
+          const allItems = Array.from(document.querySelectorAll('[role="menuitem"]'));
+        
+          const match = allItems.find(el => {
+            const inner = el.querySelector('.goog-menuitem-content');
+            return (
+              el.offsetParent !== null &&
+              inner?.textContent.trim().toLowerCase() === finalLabel
+            );
+          });
+        
+          if (match) {
+            const rect = match.getBoundingClientRect();
+            const x = rect.left + rect.width / 2;
+            const y = rect.top + rect.height / 2;
+        
+            ['pointerdown', 'mousedown', 'mouseup', 'click'].forEach(type => {
+              const event = new MouseEvent(type, {
+                bubbles: true,
+                cancelable: true,
+                clientX: x,
+                clientY: y,
+                view: window,
+              });
+              match.dispatchEvent(event);
+            });
+          } else {
+            alert(`"${labels[index]}" matched but couldn't be clicked with PointerEvent.`);
+          }
+        }, 400);
+        
       }
     } else if (attempts < 10) {
       attempts++;
@@ -60,7 +93,6 @@ function createToolbar() {
   bar.innerHTML = `
     <b>⭐ Quickbar</b>
     <button id="triggerTheme" style="display:block; margin:8px 0; background:#4285f4; color:#fff; border:none; border-radius:4px; padding:6px 12px; cursor:pointer;">Format > Theme</button>
-    <input type="text" id="functionSearch" placeholder="Search functions..." style="display:block; margin-top:5px; width:160px;">
     <div id="quickbar-buttons"></div>
   `;
   document.body.appendChild(bar);
