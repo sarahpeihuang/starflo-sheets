@@ -13,12 +13,12 @@ function findVisibleElementByText(text, index) {
   return elements.find(el => {
     if (el.offsetParent === null) return false;
 
-    if (index === 0) {
-      return el.textContent.trim().toLowerCase() === text.toLowerCase();
-    }
+    const rawText = el.innerText.trim().toLowerCase();
+    const noHotkey = rawText.replace(/\s+[^\s]+\s*$/, '').trim();
 
-    const inner = el.querySelector('.goog-menuitem-content');
-    return inner?.textContent.trim().toLowerCase() === text.toLowerCase();
+    return index === 0
+      ? rawText === text.toLowerCase() || noHotkey === text.toLowerCase()
+      : (el.querySelector('.goog-menuitem-content')?.textContent.trim().toLowerCase() === text.toLowerCase());
   });
 }
 
@@ -43,10 +43,9 @@ function triggerMenuPath(path) {
 
           const match = allItems.find(el => {
             const inner = el.querySelector('.goog-menuitem-content');
-            return (
-              el.offsetParent !== null &&
-              (inner?.textContent.trim().toLowerCase() === finalLabel || el.innerText.trim().toLowerCase() === finalLabel)
-            );
+            const raw = inner?.textContent.trim().toLowerCase() || el.innerText.trim().toLowerCase();
+            const noHotkey = raw.replace(/\s+[^\s]+\s*$/, '').trim();
+            return el.offsetParent !== null && (raw === finalLabel || noHotkey === finalLabel);
           });
 
           if (match) {
@@ -100,16 +99,74 @@ function updateQuickbar() {
     const buttons = data.pinnedFunctions || [];
     const container = document.getElementById("quickbar-buttons");
     container.innerHTML = '';
-    buttons.forEach((func) => {
+
+    buttons.forEach((func, i) => {
+      const wrapper = document.createElement("div");
+      wrapper.style.display = "flex";
+      wrapper.style.alignItems = "center";
+      wrapper.style.margin = "5px 0";
+
+      const handle = document.createElement("span");
+      handle.textContent = "⋮⋮";
+      handle.draggable = true;
+      handle.dataset.index = i;
+      handle.style.cssText = `
+        cursor: grab;
+        padding: 0 6px;
+        user-select: none;
+      `;
+
+      handle.ondragstart = (e) => {
+        e.dataTransfer.setData("text/plain", handle.dataset.index);
+        wrapper.style.opacity = '0.5';
+      };
+
+      handle.ondragend = () => {
+        wrapper.style.opacity = '1';
+      };
+
+      wrapper.ondragover = (e) => {
+        e.preventDefault();
+        wrapper.style.background = "#f0f0f0";
+      };
+
+      wrapper.ondragleave = () => {
+        wrapper.style.background = "";
+      };
+
+      wrapper.ondrop = (e) => {
+        e.preventDefault();
+        const from = parseInt(e.dataTransfer.getData("text/plain"), 10);
+        const to = parseInt(handle.dataset.index, 10);
+        if (from === to) return;
+
+        const reordered = [...buttons];
+        const [moved] = reordered.splice(from, 1);
+        reordered.splice(to, 0, moved);
+
+        chrome.storage.local.set({ pinnedFunctions: reordered }, updateQuickbar);
+      };
+
       const btn = document.createElement("button");
-      btn.innerText = func;
-      btn.style.display = "block";
-      btn.style.margin = "5px 0";
+      btn.textContent = func;
+      btn.style.cssText = `
+        flex-grow: 1;
+        padding: 6px 8px;
+        border: 1px solid #888;
+        background: white;
+        font-family: Arial, sans-serif;
+        cursor: pointer;
+      `;
       btn.onclick = () => triggerMenuPath(func);
-      container.appendChild(btn);
+
+      wrapper.appendChild(handle);
+      wrapper.appendChild(btn);
+      container.appendChild(wrapper);
     });
   });
 }
+
+
 
 function injectStarsIntoMenu(menu) {
   const items = menu.querySelectorAll('[role="menuitem"]');
@@ -121,7 +178,8 @@ function injectStarsIntoMenu(menu) {
       if (item.querySelector('.pin-star')) return;
       if (item.offsetParent === null) return;
 
-      const label = item.querySelector('.goog-menuitem-content')?.innerText?.trim() || item.innerText.trim();
+      const rawLabel = item.querySelector('.goog-menuitem-content')?.innerText?.trim() || item.innerText.trim();
+      const label = rawLabel.replace(/\s+[^\s]+\s*$/, '').trim();
       if (!label || item.getAttribute("aria-haspopup") === "true") return;
 
       const path = getMenuPath(item, label, menu);
@@ -169,20 +227,17 @@ function getMenuPath(item, label, menu) {
     }
   }
 
-  // Fallback: try to find closest open top-level menu
   if (!topLabel) {
     const active = document.querySelector('div[role="menubar"] [aria-expanded="true"]');
     topLabel = active?.innerText?.trim();
   }
 
-  // Final fallback
   if (!topLabel) {
     topLabel = lastTopMenu || 'Unknown';
   }
 
   return `${topLabel} > ${label}`;
 }
-
 
 function createToolbar() {
   const bar = document.createElement('div');
@@ -196,24 +251,9 @@ function createToolbar() {
   bar.style.zIndex = 9999;
   bar.innerHTML = `
     <b>⭐ Quickbar</b>
-    <button id="triggerTheme" style="display:block; margin:8px 0; background:#4285f4; color:#fff; border:none; border-radius:4px; padding:6px 12px; cursor:pointer;">Format > Theme</button>
-    <input type="text" id="functionSearch" placeholder="Search functions..." style="display:block; margin-top:5px; width:160px;">
     <div id="quickbar-buttons"></div>
   `;
   document.body.appendChild(bar);
-
-  document.getElementById('triggerTheme').onclick = function () {
-    triggerMenuPath("Format > Theme");
-  };
-
-  const input = document.getElementById('functionSearch');
-  input.addEventListener('input', (e) => {
-    const query = e.target.value.toLowerCase();
-    const allButtons = document.querySelectorAll('#quickbar-buttons button');
-    allButtons.forEach(btn => {
-      btn.style.display = btn.innerText.toLowerCase().includes(query) ? 'block' : 'none';
-    });
-  });
 
   updateQuickbar();
 }
