@@ -1,4 +1,3 @@
-// content.js
 let lastTopMenu = null;
 
 function simulateClick(el) {
@@ -7,18 +6,27 @@ function simulateClick(el) {
   el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 }
 
+function cleanText(text) {
+  return text?.replace(/\s+/g, ' ').replace(/\u200B/g, '').trim().toLowerCase() || '';
+}
+
 function findVisibleElementByText(text, index) {
   const elements = Array.from(document.querySelectorAll('[role="menuitem"]'));
 
   return elements.find(el => {
     if (el.offsetParent === null) return false;
 
-    const rawText = el.innerText.trim().toLowerCase();
-    const noHotkey = rawText.replace(/\s+[^\s]+\s*$/, '').trim();
+    let raw = el.querySelector('.goog-menuitem-content')?.textContent || el.textContent;
+    let clean = raw.trim().toLowerCase().replace(/\s+ctrl\+.*/i, '').replace(/[⭐☆]/g, '');
 
-    return index === 0
-      ? rawText === text.toLowerCase() || noHotkey === text.toLowerCase()
-      : (el.querySelector('.goog-menuitem-content')?.textContent.trim().toLowerCase() === text.toLowerCase());
+    const target = text.toLowerCase();
+    console.log(`[DEBUG] Comparing "${clean}" with target "${target}"`);
+
+    if (index === 0) {
+      return clean === target;
+    }
+
+    return clean === target;
   });
 }
 
@@ -28,25 +36,27 @@ function triggerMenuPath(path) {
 
   function open(index) {
     const label = labels[index];
+    console.log(`[DEBUG] Opening level ${index}: "${label}"`);
     const el = findVisibleElementByText(label, index);
 
     if (el) {
-      if (index === 0) lastTopMenu = label;
-
+      console.log(`[DEBUG] Found element for "${label}", clicking...`);
       simulateClick(el);
+
       if (index < labels.length - 1) {
         setTimeout(() => open(index + 1), 400);
       } else {
+        // Final click with pointer simulation
         setTimeout(() => {
           const finalLabel = labels[index].toLowerCase();
           const allItems = Array.from(document.querySelectorAll('[role="menuitem"]'));
-
           const match = allItems.find(el => {
-            const inner = el.querySelector('.goog-menuitem-content');
-            const raw = inner?.textContent.trim().toLowerCase() || el.innerText.trim().toLowerCase();
-            const noHotkey = raw.replace(/\s+[^\s]+\s*$/, '').trim();
-            return el.offsetParent !== null && (raw === finalLabel || noHotkey === finalLabel);
+            const text = el.querySelector('.goog-menuitem-content')?.textContent || el.textContent;
+            const clean = text.trim().toLowerCase().replace(/\s+ctrl\+.*/i, '').replace(/[⭐☆]/g, '');
+            return el.offsetParent !== null && clean === finalLabel;
           });
+
+          console.log(`[DEBUG] Final match element:`, match);
 
           if (match) {
             const rect = match.getBoundingClientRect();
@@ -79,18 +89,14 @@ function triggerMenuPath(path) {
   open(0);
 }
 
+
 function togglePin(path) {
   chrome.storage.local.get("pinnedFunctions", (data) => {
     let pins = data.pinnedFunctions || [];
     const index = pins.indexOf(path);
-    if (index === -1) {
-      pins.push(path);
-    } else {
-      pins.splice(index, 1);
-    }
-    chrome.storage.local.set({ pinnedFunctions: pins }, () => {
-      updateQuickbar();
-    });
+    if (index === -1) pins.push(path);
+    else pins.splice(index, 1);
+    chrome.storage.local.set({ pinnedFunctions: pins }, updateQuickbar);
   });
 }
 
@@ -99,74 +105,24 @@ function updateQuickbar() {
     const buttons = data.pinnedFunctions || [];
     const container = document.getElementById("quickbar-buttons");
     container.innerHTML = '';
-
-    buttons.forEach((func, i) => {
-      const wrapper = document.createElement("div");
-      wrapper.style.display = "flex";
-      wrapper.style.alignItems = "center";
-      wrapper.style.margin = "5px 0";
-
-      const handle = document.createElement("span");
-      handle.textContent = "⋮⋮";
-      handle.draggable = true;
-      handle.dataset.index = i;
-      handle.style.cssText = `
-        cursor: grab;
-        padding: 0 6px;
-        user-select: none;
-      `;
-
-      handle.ondragstart = (e) => {
-        e.dataTransfer.setData("text/plain", handle.dataset.index);
-        wrapper.style.opacity = '0.5';
-      };
-
-      handle.ondragend = () => {
-        wrapper.style.opacity = '1';
-      };
-
-      wrapper.ondragover = (e) => {
-        e.preventDefault();
-        wrapper.style.background = "#f0f0f0";
-      };
-
-      wrapper.ondragleave = () => {
-        wrapper.style.background = "";
-      };
-
-      wrapper.ondrop = (e) => {
-        e.preventDefault();
-        const from = parseInt(e.dataTransfer.getData("text/plain"), 10);
-        const to = parseInt(handle.dataset.index, 10);
-        if (from === to) return;
-
-        const reordered = [...buttons];
-        const [moved] = reordered.splice(from, 1);
-        reordered.splice(to, 0, moved);
-
-        chrome.storage.local.set({ pinnedFunctions: reordered }, updateQuickbar);
-      };
-
+    buttons.forEach((func) => {
       const btn = document.createElement("button");
-      btn.textContent = func;
-      btn.style.cssText = `
-        flex-grow: 1;
-        padding: 6px 8px;
-        border: 1px solid #888;
-        background: white;
-        font-family: Arial, sans-serif;
-        cursor: pointer;
-      `;
+      btn.innerText = func;
+      Object.assign(btn.style, {
+        display: "block",
+        margin: "8px 0",
+        background: "#4285f4",
+        color: "#fff",
+        border: "none",
+        borderRadius: "4px",
+        padding: "6px 12px",
+        cursor: "pointer"
+      });
       btn.onclick = () => triggerMenuPath(func);
-
-      wrapper.appendChild(handle);
-      wrapper.appendChild(btn);
-      container.appendChild(wrapper);
+      container.appendChild(btn);
     });
   });
 }
-
-
 
 function injectStarsIntoMenu(menu) {
   const items = menu.querySelectorAll('[role="menuitem"]');
@@ -178,8 +134,7 @@ function injectStarsIntoMenu(menu) {
       if (item.querySelector('.pin-star')) return;
       if (item.offsetParent === null) return;
 
-      const rawLabel = item.querySelector('.goog-menuitem-content')?.innerText?.trim() || item.innerText.trim();
-      const label = rawLabel.replace(/\s+[^\s]+\s*$/, '').trim();
+      const label = item.querySelector('.goog-menuitem-content')?.innerText?.trim() || item.innerText.trim();
       if (!label || item.getAttribute("aria-haspopup") === "true") return;
 
       const path = getMenuPath(item, label, menu);
@@ -219,12 +174,9 @@ function observeMenus() {
 function getMenuPath(item, label, menu) {
   const menuId = menu?.id;
   let topLabel = null;
-
   if (menuId) {
     const opener = document.querySelector(`[aria-controls="${menuId}"]`);
-    if (opener) {
-      topLabel = opener.innerText?.trim();
-    }
+    if (opener) topLabel = opener.innerText?.trim();
   }
 
   if (!topLabel) {
@@ -232,10 +184,7 @@ function getMenuPath(item, label, menu) {
     topLabel = active?.innerText?.trim();
   }
 
-  if (!topLabel) {
-    topLabel = lastTopMenu || 'Unknown';
-  }
-
+  if (!topLabel) topLabel = lastTopMenu || 'Unknown';
   return `${topLabel} > ${label}`;
 }
 
@@ -254,7 +203,6 @@ function createToolbar() {
     <div id="quickbar-buttons"></div>
   `;
   document.body.appendChild(bar);
-
   updateQuickbar();
 }
 
