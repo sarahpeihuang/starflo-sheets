@@ -1,5 +1,6 @@
 // content.js
 let lastTopMenu = null;
+let editingMode = false;
 
 function simulateClick(el) {
   el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
@@ -9,41 +10,40 @@ function simulateClick(el) {
 
 function cleanText(text) {
   return text
-    ?.replace(/\s+/g, ' ')                                 // collapse whitespace
-    .replace(/\u200B/g, '')                                // remove zero-width spaces
-    .replace(/[⭐☆]/g, '')                                   // remove stars
-    .replace(/\s*(ctrl|⌘|command|alt|option|shift|⇧)\s*\+.*$/i, '') // remove trailing shortcuts
+    ?.replace(/\s+/g, ' ')
+    .replace(/\u200B/g, '')
+    .replace(/[⭐☆]/g, '')
+    .replace(/\s*(ctrl|⌘|command|alt|option|shift|⇧)\s*\+.*$/i, '')
     .trim()
     .toLowerCase() || '';
 }
 
-function findVisibleElementByText(text, index) {
+function findVisibleElementByText(text) {
   const elements = Array.from(document.querySelectorAll('[role="menuitem"]'));
   const target = cleanText(text);
+
   return elements.find(el => {
     if (el.offsetParent === null) return false;
     const raw = el.querySelector('.goog-menuitem-content')?.textContent || el.textContent;
-    const cleaned = cleanText(raw);
-    return cleaned === target;
+    return cleanText(raw) === target;
   });
 }
 
 function triggerMenuPath(path) {
-  const labels = path.split(' > ').map(l => cleanText(l.trim()));
+  const labels = path.split(' > ').map(l => l.trim());
   let attempts = 0;
 
   function open(index) {
     const label = labels[index];
-    const el = findVisibleElementByText(label, index);
+    const el = findVisibleElementByText(label);
 
     if (el) {
       simulateClick(el);
-
       if (index < labels.length - 1) {
         setTimeout(() => open(index + 1), 400);
       } else {
         setTimeout(() => {
-          const finalLabel = labels[index];
+          const finalLabel = cleanText(labels[index]);
           const allItems = Array.from(document.querySelectorAll('[role="menuitem"]'));
           const match = allItems.find(el => {
             const text = el.querySelector('.goog-menuitem-content')?.textContent || el.textContent;
@@ -96,23 +96,99 @@ function updateQuickbar() {
     const buttons = data.pinnedFunctions || [];
     const container = document.getElementById("quickbar-buttons");
     container.innerHTML = '';
-    buttons.forEach((func) => {
+    buttons.forEach((func, index) => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "quickbar-button";
+      wrapper.setAttribute("draggable", editingMode);
+      wrapper.dataset.index = index;
+      wrapper.style.display = "flex";
+      wrapper.style.alignItems = "center";
+
       const btn = document.createElement("button");
       btn.innerText = func;
       Object.assign(btn.style, {
-        display: "block",
-        margin: "8px 0",
         background: "#4285f4",
         color: "#fff",
         border: "none",
         borderRadius: "4px",
         padding: "6px 12px",
-        cursor: "pointer"
+        cursor: editingMode ? "default" : "pointer",
+        flexGrow: 1
       });
-      btn.onclick = () => triggerMenuPath(func);
-      container.appendChild(btn);
+      if (!editingMode) btn.onclick = () => triggerMenuPath(func);
+
+      if (editingMode) {
+        const drag = document.createElement("span");
+        drag.textContent = "⋮⋮";
+        drag.style.cssText = "cursor: grab; padding: 0 6px; font-size: 16px;";
+
+        const del = document.createElement("button");
+        del.innerText = "✕";
+        del.style.cssText = "margin-left: 6px; background: #fff; color: black; border: 1px solid #ccc; cursor: pointer;";
+        del.onclick = () => {
+          buttons.splice(index, 1);
+          chrome.storage.local.set({ pinnedFunctions: buttons }, updateQuickbar);
+        };
+
+        wrapper.appendChild(drag);
+        wrapper.appendChild(btn);
+        wrapper.appendChild(del);
+      } else {
+        wrapper.appendChild(btn);
+      }
+
+      container.appendChild(wrapper);
     });
+
+    if (editingMode) enableDragDrop(container, buttons);
   });
+}
+
+function enableDragDrop(container, data) {
+  let draggingEl;
+  container.addEventListener("dragstart", e => {
+    draggingEl = e.target;
+    e.dataTransfer.effectAllowed = "move";
+  });
+
+  container.addEventListener("dragover", e => {
+    e.preventDefault();
+    const afterElement = [...container.children].find(child => {
+      const box = child.getBoundingClientRect();
+      return e.clientY < box.top + box.height / 2;
+    });
+    if (afterElement) container.insertBefore(draggingEl, afterElement);
+    else container.appendChild(draggingEl);
+  });
+
+  container.addEventListener("drop", () => {
+    const newOrder = [...container.children].map(el => el.querySelector("button").innerText);
+    chrome.storage.local.set({ pinnedFunctions: newOrder }, updateQuickbar);
+  });
+}
+
+function getFullMenuPath(item) {
+  let label = cleanText(item.querySelector('.goog-menuitem-content')?.textContent || item.textContent);
+  let path = [label];
+  let current = item.closest('[role="menu"]');
+
+  while (current) {
+    const opener = document.querySelector(`[aria-controls="${current.id}"]`);
+    if (!opener) break;
+    const openerLabel = cleanText(opener.textContent);
+    path.unshift(openerLabel);
+    current = opener.closest('[role="menu"]');
+  }
+
+  const topMenu = document.querySelector('div[role="menubar"] [aria-expanded="true"]');
+  if (topMenu) {
+    const topLabel = cleanText(topMenu.textContent);
+    if (path[0] !== topLabel) {
+      path.unshift(topLabel);
+    }
+  }
+
+  return path.join(' > ');
 }
 
 function injectStarsIntoMenu(menu) {
@@ -125,11 +201,10 @@ function injectStarsIntoMenu(menu) {
       if (item.querySelector('.pin-star')) return;
       if (item.offsetParent === null) return;
 
-      const rawLabel = item.querySelector('.goog-menuitem-content')?.innerText?.trim() || item.innerText.trim();
-      const label = cleanText(rawLabel);
+      const label = cleanText(item.querySelector('.goog-menuitem-content')?.innerText || item.innerText);
       if (!label || item.getAttribute("aria-haspopup") === "true") return;
 
-      const path = getMenuPath(item, label, menu);
+      const path = getFullMenuPath(item);
       if (!path) return;
 
       const star = document.createElement('span');
@@ -163,23 +238,6 @@ function observeMenus() {
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
-function getMenuPath(item, label, menu) {
-  const menuId = menu?.id;
-  let topLabel = null;
-  if (menuId) {
-    const opener = document.querySelector(`[aria-controls="${menuId}"]`);
-    if (opener) topLabel = opener.innerText?.trim();
-  }
-
-  if (!topLabel) {
-    const active = document.querySelector('div[role="menubar"] [aria-expanded="true"]');
-    topLabel = active?.innerText?.trim();
-  }
-
-  if (!topLabel) topLabel = lastTopMenu || 'Unknown';
-  return `${cleanText(topLabel)} > ${cleanText(label)}`;
-}
-
 function createToolbar() {
   const bar = document.createElement('div');
   bar.id = 'quickbar';
@@ -190,10 +248,30 @@ function createToolbar() {
   bar.style.border = '1px solid #ccc';
   bar.style.padding = '10px';
   bar.style.zIndex = 9999;
-  bar.innerHTML = `
-    <b>⭐ Quickbar</b>
-    <div id="quickbar-buttons"></div>
-  `;
+
+  const title = document.createElement('b');
+  title.innerText = '⭐ Quickbar ';
+
+  const toggleEdit = document.createElement('input');
+  toggleEdit.type = 'checkbox';
+  toggleEdit.style.verticalAlign = 'middle';
+  toggleEdit.onchange = () => {
+    editingMode = toggleEdit.checked;
+    editLabel.innerText = editingMode ? "Confirm" : "Edit";
+    updateQuickbar();
+  };
+
+  const editLabel = document.createElement('label');
+  editLabel.innerText = "Edit";
+  editLabel.style.marginLeft = "4px";
+
+  const container = document.createElement('div');
+  container.id = 'quickbar-buttons';
+
+  bar.appendChild(title);
+  bar.appendChild(toggleEdit);
+  bar.appendChild(editLabel);
+  bar.appendChild(container);
   document.body.appendChild(bar);
   updateQuickbar();
 }
