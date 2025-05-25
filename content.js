@@ -3,34 +3,37 @@ let lastTopMenu = null;
 let editingMode = false;
 
 function simulateClick(el) {
-  el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-  el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-  el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 }
 
 function cleanText(text) {
-  return text
-    ?.replace(/\s+/g, ' ')
-    .replace(/\u200B/g, '')
-    .replace(/[⭐☆]/g, '')
-    .replace(/\s*(ctrl|⌘|command|alt|option|shift|⇧)\s*\+.*$/i, '')
-    .trim()
-    .toLowerCase() || '';
+  return (
+    text
+      ?.replace(/\s+/g, " ")
+      .replace(/\u200B/g, "")
+      .replace(/[⭐☆]/g, "")
+      .replace(/\s*(ctrl|⌘|command|alt|option|shift|⇧)\s*\+.*$/i, "")
+      .trim()
+      .toLowerCase() || ""
+  );
 }
 
 function findVisibleElementByText(text) {
   const elements = Array.from(document.querySelectorAll('[role="menuitem"]'));
   const target = cleanText(text);
 
-  return elements.find(el => {
+  return elements.find((el) => {
     if (el.offsetParent === null) return false;
-    const raw = el.querySelector('.goog-menuitem-content')?.textContent || el.textContent;
+    const raw =
+      el.querySelector(".goog-menuitem-content")?.textContent || el.textContent;
     return cleanText(raw) === target;
   });
 }
 
 function triggerMenuPath(path) {
-  const labels = path.split(' > ').map(l => l.trim());
+  const labels = path.split(" > ").map((l) => l.trim());
   let attempts = 0;
 
   function open(index) {
@@ -44,9 +47,13 @@ function triggerMenuPath(path) {
       } else {
         setTimeout(() => {
           const finalLabel = cleanText(labels[index]);
-          const allItems = Array.from(document.querySelectorAll('[role="menuitem"]'));
-          const match = allItems.find(el => {
-            const text = el.querySelector('.goog-menuitem-content')?.textContent || el.textContent;
+          const allItems = Array.from(
+            document.querySelectorAll('[role="menuitem"]')
+          );
+          const match = allItems.find((el) => {
+            const text =
+              el.querySelector(".goog-menuitem-content")?.textContent ||
+              el.textContent;
             return el.offsetParent !== null && cleanText(text) === finalLabel;
           });
 
@@ -55,7 +62,7 @@ function triggerMenuPath(path) {
             const x = rect.left + rect.width / 2;
             const y = rect.top + rect.height / 2;
 
-            ['pointerdown', 'mousedown', 'mouseup', 'click'].forEach(type => {
+            ["pointerdown", "mousedown", "mouseup", "click"].forEach((type) => {
               const event = new MouseEvent(type, {
                 bubbles: true,
                 cancelable: true,
@@ -66,7 +73,9 @@ function triggerMenuPath(path) {
               match.dispatchEvent(event);
             });
           } else {
-            alert(`"${labels[index]}" matched but couldn't be clicked with PointerEvent.`);
+            alert(
+              `"${labels[index]}" matched but couldn't be clicked with PointerEvent.`
+            );
           }
         }, 400);
       }
@@ -95,7 +104,7 @@ function updateQuickbar() {
   chrome.storage.local.get("pinnedFunctions", (data) => {
     const buttons = data.pinnedFunctions || [];
     const container = document.getElementById("quickbar-buttons");
-    container.innerHTML = '';
+    container.innerHTML = "";
     buttons.forEach((func, index) => {
       const wrapper = document.createElement("div");
       wrapper.className = "quickbar-button";
@@ -113,7 +122,7 @@ function updateQuickbar() {
         borderRadius: "4px",
         padding: "6px 12px",
         cursor: editingMode ? "default" : "pointer",
-        flexGrow: 1
+        flexGrow: 1,
       });
       if (!editingMode) btn.onclick = () => triggerMenuPath(func);
 
@@ -124,10 +133,14 @@ function updateQuickbar() {
 
         const del = document.createElement("button");
         del.innerText = "✕";
-        del.style.cssText = "margin-left: 6px; background: #fff; color: black; border: 1px solid #ccc; cursor: pointer;";
+        del.style.cssText =
+          "margin-left: 6px; background: #fff; color: black; border: 1px solid #ccc; cursor: pointer;";
         del.onclick = () => {
           buttons.splice(index, 1);
-          chrome.storage.local.set({ pinnedFunctions: buttons }, updateQuickbar);
+          chrome.storage.local.set(
+            { pinnedFunctions: buttons },
+            updateQuickbar
+          );
         };
 
         wrapper.appendChild(drag);
@@ -146,14 +159,14 @@ function updateQuickbar() {
 
 function enableDragDrop(container, data) {
   let draggingEl;
-  container.addEventListener("dragstart", e => {
+  container.addEventListener("dragstart", (e) => {
     draggingEl = e.target;
     e.dataTransfer.effectAllowed = "move";
   });
 
-  container.addEventListener("dragover", e => {
+  container.addEventListener("dragover", (e) => {
     e.preventDefault();
-    const afterElement = [...container.children].find(child => {
+    const afterElement = [...container.children].find((child) => {
       const box = child.getBoundingClientRect();
       return e.clientY < box.top + box.height / 2;
     });
@@ -162,13 +175,18 @@ function enableDragDrop(container, data) {
   });
 
   container.addEventListener("drop", () => {
-    const newOrder = [...container.children].map(el => el.querySelector("button").innerText);
+    const newOrder = [...container.children].map(
+      (el) => el.querySelector("button").innerText
+    );
     chrome.storage.local.set({ pinnedFunctions: newOrder }, updateQuickbar);
   });
 }
 
 function getFullMenuPath(item) {
-  let label = cleanText(item.querySelector('.goog-menuitem-content')?.textContent || item.textContent);
+  let label = cleanText(
+    item.querySelector(".goog-menuitem-content")?.textContent ||
+      item.textContent
+  );
   let path = [label];
   let current = item.closest('[role="menu"]');
 
@@ -180,7 +198,9 @@ function getFullMenuPath(item) {
     current = opener.closest('[role="menu"]');
   }
 
-  const topMenu = document.querySelector('div[role="menubar"] [aria-expanded="true"]');
+  const topMenu = document.querySelector(
+    'div[role="menubar"] [aria-expanded="true"]'
+  );
   if (topMenu) {
     const topLabel = cleanText(topMenu.textContent);
     if (path[0] !== topLabel) {
@@ -188,7 +208,7 @@ function getFullMenuPath(item) {
     }
   }
 
-  return path.join(' > ');
+  return path.join(" > ");
 }
 
 function injectStarsIntoMenu(menu) {
@@ -197,38 +217,41 @@ function injectStarsIntoMenu(menu) {
   chrome.storage.local.get("pinnedFunctions", (data) => {
     const pinned = data.pinnedFunctions || [];
 
-    items.forEach(item => {
-      if (item.querySelector('.pin-star')) return;
+    items.forEach((item) => {
+      if (item.querySelector(".pin-star")) return;
       if (item.offsetParent === null) return;
 
-      const label = cleanText(item.querySelector('.goog-menuitem-content')?.innerText || item.innerText);
+      const label = cleanText(
+        item.querySelector(".goog-menuitem-content")?.innerText ||
+          item.innerText
+      );
       if (!label || item.getAttribute("aria-haspopup") === "true") return;
 
       const path = getFullMenuPath(item);
       if (!path) return;
 
-      const star = document.createElement('span');
-      star.className = 'pin-star';
-      star.textContent = pinned.includes(path) ? '⭐' : '☆';
-      star.style.cssText = 'float:right; margin-left:8px; cursor:pointer;';
+      const star = document.createElement("span");
+      star.className = "pin-star";
+      star.textContent = pinned.includes(path) ? "⭐" : "☆";
+      star.style.cssText = "float:right; margin-left:0px; cursor:pointer;";
       star.onclick = (e) => {
         e.stopPropagation();
         togglePin(path);
-        star.textContent = star.textContent === '⭐' ? '☆' : '⭐';
+        star.textContent = star.textContent === "⭐" ? "☆" : "⭐";
       };
 
-      const target = item.querySelector('.goog-menuitem-content') || item;
+      const target = item.querySelector(".goog-menuitem-content") || item;
       target.appendChild(star);
     });
   });
 }
 
 function observeMenus() {
-  const observer = new MutationObserver(mutations => {
+  const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       for (const added of mutation.addedNodes) {
         if (!(added instanceof HTMLElement)) continue;
-        if (added.getAttribute?.('role') === 'menu') {
+        if (added.getAttribute?.("role") === "menu") {
           injectStarsIntoMenu(added);
         }
       }
@@ -239,44 +262,98 @@ function observeMenus() {
 }
 
 function createToolbar() {
-  const bar = document.createElement('div');
-  bar.id = 'quickbar';
-  bar.style.position = 'fixed';
-  bar.style.top = '100px';
-  bar.style.right = '20px';
-  bar.style.background = '#fff';
-  bar.style.border = '1px solid #ccc';
-  bar.style.padding = '10px';
+  const bar = document.createElement("div");
+  bar.id = "quickbar";
+  bar.style.position = "fixed";
+  bar.style.top = "100px";
+  bar.style.right = "20px";
+  bar.style.background = "#fff";
+  bar.style.border = "1px solid #ccc";
+  bar.style.padding = "10px";
   bar.style.zIndex = 9999;
+  bar.style.cursor = "move"; // Indicate draggable
 
-  const title = document.createElement('b');
-  title.innerText = '⭐ Quickbar ';
+  const titleBar = document.createElement("div");
+  titleBar.style.display = "flex";
+  titleBar.style.justifyContent = "space-between";
+  titleBar.style.alignItems = "center";
 
-  const toggleEdit = document.createElement('input');
-  toggleEdit.type = 'checkbox';
-  toggleEdit.style.verticalAlign = 'middle';
+  const title = document.createElement("b");
+  title.innerText = "⭐ Quickbar ";
+
+  const collapseBtn = document.createElement("button");
+  collapseBtn.innerText = "−"; // minus sign for collapse
+  collapseBtn.style.marginLeft = "8px";
+  collapseBtn.style.cursor = "pointer";
+
+  titleBar.appendChild(title);
+  titleBar.appendChild(collapseBtn);
+
+  const toggleEdit = document.createElement("input");
+  toggleEdit.type = "checkbox";
+  toggleEdit.style.verticalAlign = "middle";
   toggleEdit.onchange = () => {
     editingMode = toggleEdit.checked;
     editLabel.innerText = editingMode ? "Confirm" : "Edit";
     updateQuickbar();
   };
 
-  const editLabel = document.createElement('label');
+  const editLabel = document.createElement("label");
   editLabel.innerText = "Edit";
   editLabel.style.marginLeft = "4px";
 
-  const container = document.createElement('div');
-  container.id = 'quickbar-buttons';
+  const container = document.createElement("div");
+  container.id = "quickbar-buttons";
 
-  bar.appendChild(title);
-  bar.appendChild(toggleEdit);
-  bar.appendChild(editLabel);
-  bar.appendChild(container);
+  const content = document.createElement("div");
+  content.appendChild(toggleEdit);
+  content.appendChild(editLabel);
+  content.appendChild(container);
+
+  bar.appendChild(titleBar);
+  bar.appendChild(content);
   document.body.appendChild(bar);
+
+  // Make the toolbar draggable
+  makeDraggable(bar);
+
+  // Collapse/expand functionality
+  let collapsed = false;
+  collapseBtn.onclick = () => {
+    collapsed = !collapsed;
+    content.style.display = collapsed ? "none" : "block";
+    collapseBtn.innerText = collapsed ? "+" : "−";
+  };
+
   updateQuickbar();
 }
 
-window.addEventListener('load', () => {
+function makeDraggable(el) {
+  let isDragging = false;
+  let offsetX, offsetY;
+
+  el.addEventListener("mousedown", (e) => {
+    isDragging = true;
+    offsetX = e.clientX - el.getBoundingClientRect().left;
+    offsetY = e.clientY - el.getBoundingClientRect().top;
+    el.style.userSelect = "none"; // Prevent text selection
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (isDragging) {
+      el.style.left = e.clientX - offsetX + "px";
+      el.style.top = e.clientY - offsetY + "px";
+      el.style.right = "auto"; // Reset right when dragging
+    }
+  });
+
+  document.addEventListener("mouseup", () => {
+    isDragging = false;
+    el.style.userSelect = "auto";
+  });
+}
+
+window.addEventListener("load", () => {
   createToolbar();
   observeMenus();
 });
