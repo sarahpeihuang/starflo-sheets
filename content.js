@@ -106,6 +106,7 @@ function updateQuickbar() {
     const container = document.getElementById("quickbar-buttons");
     container.innerHTML = "";
     buttons.forEach((func, index) => {
+      const funcList = String(func).trim().split(">");
       const wrapper = document.createElement("div");
       wrapper.className = "quickbar-button";
       wrapper.setAttribute("draggable", editingMode);
@@ -114,7 +115,7 @@ function updateQuickbar() {
       wrapper.style.alignItems = "center";
 
       const btn = document.createElement("button");
-      btn.innerText = func;
+      btn.innerText = funcList[funcList.length - 1];
       Object.assign(btn.style, {
         background: "#4285f4",
         color: "#fff",
@@ -154,6 +155,38 @@ function updateQuickbar() {
     });
 
     if (editingMode) enableDragDrop(container, buttons);
+  });
+}
+
+function updateQuickbar2() {
+  const bar = document.getElementById("quickbar");
+  const container = document.getElementById("quickbar-buttons");
+  const editContainer = bar.editContainer;
+
+  // Fetch pinned/starred items
+  chrome.storage.local.get("pinnedFunctions", (data) => {
+    const pinned = data.pinnedFunctions || [];
+
+    // Clear previous buttons
+    container.innerHTML = "";
+
+    if (pinned.length === 0) {
+      // Hide the Edit checkbox and label
+      editContainer.style.display = "none";
+    } else {
+      // Show the Edit checkbox and label
+      editContainer.style.display = "inline-block";
+
+      // Example: Add starred item buttons
+      pinned.forEach((path) => {
+        const btn = document.createElement("button");
+        btn.innerText = path;
+        btn.onclick = () => {
+          console.log(`Clicked ${path}`);
+        };
+        container.appendChild(btn);
+      });
+    }
   });
 }
 
@@ -271,7 +304,7 @@ function createToolbar() {
   bar.style.border = "1px solid #ccc";
   bar.style.padding = "10px";
   bar.style.zIndex = 9999;
-  bar.style.cursor = "move"; // Indicate draggable
+  bar.style.cursor = "move";
 
   const titleBar = document.createElement("div");
   titleBar.style.display = "flex";
@@ -282,12 +315,15 @@ function createToolbar() {
   title.innerText = "⭐ Quickbar ";
 
   const collapseBtn = document.createElement("button");
-  collapseBtn.innerText = "−"; // minus sign for collapse
+  collapseBtn.innerText = "−";
   collapseBtn.style.marginLeft = "8px";
   collapseBtn.style.cursor = "pointer";
 
   titleBar.appendChild(title);
   titleBar.appendChild(collapseBtn);
+
+  const editContainer = document.createElement("div");
+  editContainer.style.display = "inline-block"; // default to visible
 
   const toggleEdit = document.createElement("input");
   toggleEdit.type = "checkbox";
@@ -302,12 +338,14 @@ function createToolbar() {
   editLabel.innerText = "Edit";
   editLabel.style.marginLeft = "4px";
 
+  editContainer.appendChild(toggleEdit);
+  editContainer.appendChild(editLabel);
+
   const container = document.createElement("div");
   container.id = "quickbar-buttons";
 
   const content = document.createElement("div");
-  content.appendChild(toggleEdit);
-  content.appendChild(editLabel);
+  content.appendChild(editContainer);
   content.appendChild(container);
 
   bar.appendChild(titleBar);
@@ -324,6 +362,9 @@ function createToolbar() {
     content.style.display = collapsed ? "none" : "block";
     collapseBtn.innerText = collapsed ? "+" : "−";
   };
+
+  // Save the editContainer reference for use in updateQuickbar
+  bar.editContainer = editContainer;
 
   updateQuickbar();
 }
