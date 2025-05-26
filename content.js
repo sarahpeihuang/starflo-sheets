@@ -266,7 +266,8 @@ function injectStarsIntoMenu(menu) {
       const star = document.createElement("span");
       star.className = "pin-star";
       star.textContent = pinned.includes(path) ? "⭐" : "☆";
-      star.style.cssText = "float:right; margin-left:0px; cursor:pointer;";
+      star.style.cssText =
+        "float:right; margin-left:0px; cursor:pointer; font-size: 24px;";
       star.onclick = (e) => {
         e.stopPropagation();
         togglePin(path);
