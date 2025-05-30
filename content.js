@@ -244,11 +244,18 @@ function injectStarsIntoMenu(menu) {
       star.textContent = pinned.includes(path) ? "⭐" : "☆";
       star.style.cssText =
         "float:right; margin-left:0px; cursor:pointer; font-size: 24px;";
-      star.onclick = (e) => {
+
+      // Updated to prevent all interaction
+      star.addEventListener("pointerdown", (e) => {
         e.stopPropagation();
+        e.preventDefault();
+      });
+      star.addEventListener("click", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
         togglePin(path);
         star.textContent = star.textContent === "⭐" ? "☆" : "⭐";
-      };
+      });
 
       const target = item.querySelector(".goog-menuitem-content") || item;
       target.appendChild(star);
