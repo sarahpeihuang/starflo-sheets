@@ -154,39 +154,15 @@ function updateQuickbar() {
       container.appendChild(wrapper);
     });
 
-    if (editingMode) enableDragDrop(container, buttons);
-  });
-}
-
-function updateQuickbar2() {
-  const bar = document.getElementById("quickbar");
-  const container = document.getElementById("quickbar-buttons");
-  const editContainer = bar.editContainer;
-
-  // Fetch pinned/starred items
-  chrome.storage.local.get("pinnedFunctions", (data) => {
-    const pinned = data.pinnedFunctions || [];
-
-    // Clear previous buttons
-    container.innerHTML = "";
-
-    if (pinned.length === 0) {
-      // Hide the Edit checkbox and label
+    // Hide/show editContainer based on whether there are items
+    const editContainer = document.getElementById("quickbar").editContainer;
+    if (buttons.length === 0) {
       editContainer.style.display = "none";
     } else {
-      // Show the Edit checkbox and label
       editContainer.style.display = "inline-block";
-
-      // Example: Add starred item buttons
-      pinned.forEach((path) => {
-        const btn = document.createElement("button");
-        btn.innerText = path;
-        btn.onclick = () => {
-          console.log(`Clicked ${path}`);
-        };
-        container.appendChild(btn);
-      });
     }
+
+    if (editingMode) enableDragDrop(container, buttons);
   });
 }
 
