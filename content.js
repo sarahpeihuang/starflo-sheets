@@ -296,7 +296,7 @@ function createToolbar() {
   titleBar.style.alignItems = "center";
 
   const title = document.createElement("b");
-  title.innerText = "⭐ Quickbar ";
+  title.innerText = "⭐ StarBar ";
 
   const collapseBtn = document.createElement("button");
   collapseBtn.innerText = "−";
