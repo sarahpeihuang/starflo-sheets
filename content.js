@@ -309,21 +309,20 @@ function createToolbar() {
   const editContainer = document.createElement("div");
   editContainer.style.display = "inline-block"; // default to visible
 
-  const toggleEdit = document.createElement("input");
-  toggleEdit.type = "checkbox";
-  toggleEdit.style.verticalAlign = "middle";
-  toggleEdit.onchange = () => {
-    editingMode = toggleEdit.checked;
-    editLabel.innerText = editingMode ? "Confirm" : "Edit";
+  const editButton = document.createElement("button");
+  editButton.innerText = "✏️"; // Or use an SVG/icon class if preferred
+  editButton.style.border = "none";
+  editButton.style.background = "transparent";
+  editButton.style.cursor = "pointer";
+  editButton.style.fontSize = "16px";
+
+  editButton.onclick = () => {
+    editingMode = !editingMode;
+    editButton.innerText = editingMode ? "✔️" : "✏️";
     updateQuickbar();
   };
 
-  const editLabel = document.createElement("label");
-  editLabel.innerText = "Edit";
-  editLabel.style.marginLeft = "4px";
-
-  editContainer.appendChild(toggleEdit);
-  editContainer.appendChild(editLabel);
+  editContainer.appendChild(editButton);
 
   const container = document.createElement("div");
   container.id = "quickbar-buttons";
