@@ -288,8 +288,19 @@ function createToolbar() {
   bar.style.border = "1px solid #ccc";
   bar.style.padding = "10px";
   bar.style.zIndex = 9999;
-  bar.style.cursor = "move";
+  bar.style.cursor = "default"; // Only handle is draggable
 
+  // === Draggable handle bar ===
+  const dragHandle = document.createElement("div");
+  dragHandle.style.height = "4px"; // Thinner
+  dragHandle.style.background = "#bbb";
+  dragHandle.style.borderRadius = "4px";
+  dragHandle.style.cursor = "move";
+  dragHandle.style.marginBottom = "8px";
+  dragHandle.title = "Drag to move";
+  bar.appendChild(dragHandle);
+
+  // === Title bar ===
   const titleBar = document.createElement("div");
   titleBar.style.display = "flex";
   titleBar.style.justifyContent = "space-between";
@@ -304,7 +315,7 @@ function createToolbar() {
 
   titleBar.appendChild(title);
 
-  // Edit button
+  // === Edit button ===
   const editButton = document.createElement("button");
   editButton.innerText = "✏️";
   editButton.style.border = "none";
@@ -322,7 +333,7 @@ function createToolbar() {
   bar.editButton = editButton;
   titleBar.appendChild(editButton);
 
-  // Collapse button
+  // === Collapse button ===
   const collapseBtn = document.createElement("button");
   collapseBtn.innerText = "−";
   collapseBtn.style.marginLeft = "8px";
@@ -330,20 +341,22 @@ function createToolbar() {
 
   titleBar.appendChild(collapseBtn);
 
+  // === Content container ===
   const container = document.createElement("div");
   container.id = "quickbar-buttons";
 
   const content = document.createElement("div");
   content.appendChild(container);
 
+  // === Append everything ===
   bar.appendChild(titleBar);
   bar.appendChild(content);
   document.body.appendChild(bar);
 
-  // Make the toolbar draggable
-  makeDraggable(bar);
+  // === Make only the handle draggable ===
+  makeDraggable(bar, dragHandle);
 
-  // Collapse/expand functionality
+  // === Collapse/expand functionality ===
   let collapsed = false;
   collapseBtn.onclick = () => {
     collapsed = !collapsed;
