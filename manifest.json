@@ -16,5 +16,11 @@
       "js": ["content.js"],
       "css": ["styles.css"]
     }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["starbar.jpeg"],
+      "matches": ["<all_urls>"]
+    }
   ]
 }
