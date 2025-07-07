@@ -34,50 +34,71 @@ function findVisibleElementByText(text) {
 
 function triggerMenuPath(path) {
   const labels = path.split(" > ").map((l) => l.trim());
+  const [first, ...rest] = labels;
   let attempts = 0;
 
+  // === Special case: Text color / Fill color ===
+  if (first === "Text color" || first === "Fill color") {
+    const btn = Array.from(document.querySelectorAll("[aria-label]")).find(
+      (el) => cleanText(el.getAttribute("aria-label")) === cleanText(first)
+    );
+
+    if (!btn) {
+      alert(`Could not find "${first}" button.`);
+      return;
+    }
+
+    // Step 1: Click the toolbar button
+    simulateClick(btn);
+
+    // Step 2: Wait for the color grid to appear and click the swatch
+    const targetColor = cleanText(rest.join(" > "));
+    const tryClickColor = () => {
+      const colorButtons = Array.from(
+        document.querySelectorAll("[aria-label]")
+      ).filter(
+        (el) =>
+          el.offsetParent !== null &&
+          cleanText(el.getAttribute("aria-label")) === targetColor
+      );
+
+      if (colorButtons.length > 0) {
+        simulateClick(colorButtons[0]);
+      } else if (attempts < 10) {
+        attempts++;
+        setTimeout(tryClickColor, 300);
+      } else {
+        alert(`Could not find color "${rest.join(" > ")}"`);
+      }
+    };
+
+    setTimeout(tryClickColor, 300);
+    return;
+  }
+
+  // === Regular menu path logic ===
   function open(index) {
     const label = labels[index];
-    const el = findVisibleElementByText(label);
+    let el = findVisibleElementByText(label);
+
+    if (!el && index === 0) {
+      // Try toolbar fallback
+      const toolbarBtn = Array.from(
+        document.querySelectorAll("[aria-label]")
+      ).find((btn) => {
+        return cleanText(btn.getAttribute("aria-label")) === label;
+      });
+      if (toolbarBtn) {
+        el = toolbarBtn;
+      }
+    }
 
     if (el) {
       simulateClick(el);
       if (index < labels.length - 1) {
         setTimeout(() => open(index + 1), 400);
       } else {
-        setTimeout(() => {
-          const finalLabel = cleanText(labels[index]);
-          const allItems = Array.from(
-            document.querySelectorAll('[role="menuitem"]')
-          );
-          const match = allItems.find((el) => {
-            const text =
-              el.querySelector(".goog-menuitem-content")?.textContent ||
-              el.textContent;
-            return el.offsetParent !== null && cleanText(text) === finalLabel;
-          });
-
-          if (match) {
-            const rect = match.getBoundingClientRect();
-            const x = rect.left + rect.width / 2;
-            const y = rect.top + rect.height / 2;
-
-            ["pointerdown", "mousedown", "mouseup", "click"].forEach((type) => {
-              const event = new MouseEvent(type, {
-                bubbles: true,
-                cancelable: true,
-                clientX: x,
-                clientY: y,
-                view: window,
-              });
-              match.dispatchEvent(event);
-            });
-          } else {
-            alert(
-              `"${labels[index]}" matched but couldn't be clicked with PointerEvent.`
-            );
-          }
-        }, 400);
+        // Final click if needed (like already done)
       }
     } else if (attempts < 10) {
       attempts++;
@@ -106,7 +127,7 @@ function updateQuickbar() {
     const container = document.getElementById("quickbar-buttons");
     container.innerHTML = "";
     buttons.forEach((func, index) => {
-      const funcList = String(func).trim().split(">");
+      //const funcList = String(func).trim().split(">");
       const wrapper = document.createElement("div");
       wrapper.className = "quickbar-button";
       wrapper.setAttribute("draggable", editingMode);
@@ -115,7 +136,7 @@ function updateQuickbar() {
       wrapper.style.alignItems = "center";
 
       const btn = document.createElement("button");
-      btn.innerText = funcList[funcList.length - 1];
+      btn.innerText = func;
       Object.assign(btn.style, {
         background: "#4285f4",
         color: "#fff",
@@ -395,4 +416,45 @@ function makeDraggable(el) {
 window.addEventListener("load", () => {
   createToolbar();
   observeMenus();
+});
+
+window.addEventListener("contextmenu", (e) => {
+  const target = e.target.closest("[aria-label], [title]");
+  if (!target) return;
+
+  // Only apply to color swatches inside a known container
+  const colorMenu = target.closest(
+    ".docs-material-colorpalette, .docs-material-colorswatch, .goog-menu"
+  );
+  if (!colorMenu) return;
+
+  // Prevent browser default right-click menu
+  e.preventDefault();
+  e.stopPropagation();
+
+  // Get color name from aria-label or title
+  const label =
+    target.getAttribute("aria-label") || target.getAttribute("title");
+  if (!label) return;
+
+  // Determine whether it's fill or text color
+  let prefix = "Color"; // fallback
+  const parent = document.querySelector(
+    '[aria-label*="Fill color"], [aria-label*="Text color"]'
+  );
+  if (parent?.getAttribute("aria-label")?.includes("Fill"))
+    prefix = "Fill color";
+  if (parent?.getAttribute("aria-label")?.includes("Text"))
+    prefix = "Text color";
+
+  const path = `${prefix} > ${label}`;
+
+  // Store it and update
+  chrome.storage.local.get(["pinnedFunctions"], (data) => {
+    const pins = data.pinnedFunctions || [];
+    if (!pins.includes(path)) {
+      pins.push(path);
+      chrome.storage.local.set({ pinnedFunctions: pins }, updateQuickbar);
+    }
+  });
 });
