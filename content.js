@@ -82,15 +82,10 @@ function triggerMenuPath(path) {
     let el = findVisibleElementByText(label);
 
     if (!el && index === 0) {
-      // Try toolbar fallback
       const toolbarBtn = Array.from(
         document.querySelectorAll("[aria-label]")
-      ).find((btn) => {
-        return cleanText(btn.getAttribute("aria-label")) === label;
-      });
-      if (toolbarBtn) {
-        el = toolbarBtn;
-      }
+      ).find((btn) => cleanText(btn.getAttribute("aria-label")) === label);
+      if (toolbarBtn) el = toolbarBtn;
     }
 
     if (el) {
@@ -98,7 +93,47 @@ function triggerMenuPath(path) {
       if (index < labels.length - 1) {
         setTimeout(() => open(index + 1), 400);
       } else {
-        // Final click if needed (like already done)
+        // Final click logic — retry until menu is interactable
+        const finalLabel = cleanText(labels[index]);
+        let clickAttempts = 0;
+
+        function tryClickFinal() {
+          const allItems = Array.from(
+            document.querySelectorAll('[role="menuitem"]')
+          );
+          const match = allItems.find((el) => {
+            const text =
+              el.querySelector(".goog-menuitem-content")?.textContent ||
+              el.textContent;
+            return el.offsetParent !== null && cleanText(text) === finalLabel;
+          });
+
+          if (match) {
+            const rect = match.getBoundingClientRect();
+            const x = rect.left + rect.width / 2;
+            const y = rect.top + rect.height / 2;
+
+            ["pointerdown", "mousedown", "mouseup", "click"].forEach((type) => {
+              const event = new MouseEvent(type, {
+                bubbles: true,
+                cancelable: true,
+                clientX: x,
+                clientY: y,
+                view: window,
+              });
+              match.dispatchEvent(event);
+            });
+          } else if (clickAttempts < 10) {
+            clickAttempts++;
+            requestAnimationFrame(tryClickFinal);
+          } else {
+            alert(
+              `"${finalLabel}" matched but couldn't be clicked after waiting.`
+            );
+          }
+        }
+
+        requestAnimationFrame(tryClickFinal);
       }
     } else if (attempts < 10) {
       attempts++;
