@@ -194,10 +194,17 @@ function updateQuickbar() {
           "margin-left: 6px; background: #fff; color: black; border: 1px solid #ccc; cursor: pointer;";
         del.onclick = () => {
           buttons.splice(index, 1);
-          chrome.storage.local.set(
-            { pinnedFunctions: buttons },
-            updateQuickbar
-          );
+          chrome.storage.local.set({ pinnedFunctions: buttons }, () => {
+            updateQuickbar();
+
+            // Update stars in open menus
+            const stars = document.querySelectorAll(".pin-star");
+            stars.forEach((star) => {
+              const item = star.closest('[role="menuitem"]');
+              const path = getFullMenuPath(item);
+              star.textContent = buttons.includes(path) ? "⭐" : "☆";
+            });
+          });
         };
 
         wrapper.appendChild(drag);
