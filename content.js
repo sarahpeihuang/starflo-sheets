@@ -217,12 +217,17 @@ function updateQuickbar() {
       container.appendChild(wrapper);
     });
 
-    // Hide/show editContainer based on whether there are items
-    const editContainer = document.getElementById("quickbar").editContainer;
-    if (buttons.length === 0) {
-      editContainer.style.display = "none";
-    } else {
-      editContainer.style.display = "inline-block";
+    // Hide/show editContainer and editButton based on whether there are items
+    const bar = document.getElementById("quickbar");
+    const editButton = bar?.editButton;
+    const editContainer = bar?.editContainer;
+
+    if (editButton) {
+      editButton.style.display = buttons.length === 0 ? "none" : "inline-block";
+    }
+    if (editContainer) {
+      editContainer.style.display =
+        buttons.length === 0 ? "none" : "inline-block";
     }
 
     if (editingMode) enableDragDrop(container, buttons);
@@ -386,6 +391,7 @@ function createToolbar() {
   editButton.style.cursor = "pointer";
   editButton.style.fontSize = "16px";
   editButton.style.marginLeft = "8px";
+  editButton.style.display = "none";
 
   editButton.onclick = () => {
     editingMode = !editingMode;
