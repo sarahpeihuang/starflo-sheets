@@ -196,13 +196,23 @@ function updateQuickbar() {
           buttons.splice(index, 1);
           chrome.storage.local.set({ pinnedFunctions: buttons }, () => {
             updateQuickbar();
-
             // Update stars in open menus
             const stars = document.querySelectorAll(".pin-star");
             stars.forEach((star) => {
               const item = star.closest('[role="menuitem"]');
               const path = getFullMenuPath(item);
-              star.textContent = buttons.includes(path) ? "⭐" : "☆";
+              console.log(path);
+              let flag = false;
+              for (let i = 0; i < buttons.length; i++) {
+                if (buttons[i].includes(path)) {
+                  star.textContent = "⭐";
+                  flag = true;
+                  break;
+                }
+              }
+              if (!flag) {
+                star.textContent = "☆";
+              }
             });
           });
         };
