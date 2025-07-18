@@ -370,11 +370,14 @@ function createToolbar() {
 
   // === Draggable handle bar ===
   const dragHandle = document.createElement("div");
-  dragHandle.style.height = "4px"; // Thinner
+
+  dragHandle.style.margin = "0 auto 4px auto";
+  dragHandle.style.height = "2px";
+  dragHandle.style.width = "50%";
   dragHandle.style.background = "#bbb";
   dragHandle.style.borderRadius = "4px";
   dragHandle.style.cursor = "move";
-  dragHandle.style.marginBottom = "8px";
+  dragHandle.style.marginBottom = "4px";
   dragHandle.title = "Drag to move";
   bar.appendChild(dragHandle);
 
