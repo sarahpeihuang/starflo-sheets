@@ -33,117 +33,13 @@ function findVisibleElementByText(text) {
 }
 
 function triggerMenuPath(path) {
-  const labels = path.split(" > ").map((l) => l.trim());
-  const [first, ...rest] = labels;
-  let attempts = 0;
-
-  // === Special case: Text color / Fill color ===
-  if (first === "Text color" || first === "Fill color") {
-    const btn = Array.from(document.querySelectorAll("[aria-label]")).find(
-      (el) => cleanText(el.getAttribute("aria-label")) === cleanText(first)
-    );
-
-    if (!btn) {
-      alert(`Could not find "${first}" button.`);
-      return;
-    }
-
-    // Step 1: Click the toolbar button
-    simulateClick(btn);
-
-    // Step 2: Wait for the color grid to appear and click the swatch
-    const targetColor = cleanText(rest.join(" > "));
-    const tryClickColor = () => {
-      const colorButtons = Array.from(
-        document.querySelectorAll("[aria-label]")
-      ).filter(
-        (el) =>
-          el.offsetParent !== null &&
-          cleanText(el.getAttribute("aria-label")) === targetColor
-      );
-
-      if (colorButtons.length > 0) {
-        simulateClick(colorButtons[0]);
-      } else if (attempts < 10) {
-        attempts++;
-        setTimeout(tryClickColor, 300);
-      } else {
-        alert(`Could not find color "${rest.join(" > ")}"`);
-      }
-    };
-
-    setTimeout(tryClickColor, 300);
+  const el = document.getElementById(path);
+  if (!el) {
+    alert(`Could not find menu item: "${path}"`);
     return;
   }
 
-  // === Regular menu path logic ===
-  function open(index) {
-    const label = labels[index];
-    let el = findVisibleElementByText(label);
-
-    if (!el && index === 0) {
-      const toolbarBtn = Array.from(
-        document.querySelectorAll("[aria-label]")
-      ).find((btn) => cleanText(btn.getAttribute("aria-label")) === label);
-      if (toolbarBtn) el = toolbarBtn;
-    }
-
-    if (el) {
-      simulateClick(el);
-      if (index < labels.length - 1) {
-        setTimeout(() => open(index + 1), 400);
-      } else {
-        // Final click logic — retry until menu is interactable
-        const finalLabel = cleanText(labels[index]);
-        let clickAttempts = 0;
-
-        function tryClickFinal() {
-          const allItems = Array.from(
-            document.querySelectorAll('[role="menuitem"]')
-          );
-          const match = allItems.find((el) => {
-            const text =
-              el.querySelector(".goog-menuitem-content")?.textContent ||
-              el.textContent;
-            return el.offsetParent !== null && cleanText(text) === finalLabel;
-          });
-
-          if (match) {
-            const rect = match.getBoundingClientRect();
-            const x = rect.left + rect.width / 2;
-            const y = rect.top + rect.height / 2;
-
-            ["pointerdown", "mousedown", "mouseup", "click"].forEach((type) => {
-              const event = new MouseEvent(type, {
-                bubbles: true,
-                cancelable: true,
-                clientX: x,
-                clientY: y,
-                view: window,
-              });
-              match.dispatchEvent(event);
-            });
-          } else if (clickAttempts < 10) {
-            clickAttempts++;
-            requestAnimationFrame(tryClickFinal);
-          } else {
-            alert(
-              `"${finalLabel}" matched but couldn't be clicked after waiting.`
-            );
-          }
-        }
-
-        requestAnimationFrame(tryClickFinal);
-      }
-    } else if (attempts < 10) {
-      attempts++;
-      setTimeout(() => open(index), 400);
-    } else {
-      alert(`Could not find "${label}" menu item.`);
-    }
-  }
-
-  open(0);
+  simulateClick(el);
 }
 
 function togglePin(path) {
@@ -317,6 +213,8 @@ function injectStarsIntoMenu(menu) {
       const path = getFullMenuPath(item);
       if (!path) return;
 
+      console.log(path);
+
       const star = document.createElement("span");
       star.className = "pin-star";
       star.textContent = pinned.includes(path) ? "⭐" : "☆";
@@ -337,6 +235,7 @@ function injectStarsIntoMenu(menu) {
 
       const target = item.querySelector(".goog-menuitem-content") || item;
       target.appendChild(star);
+      target.id = path;
     });
   });
 }
