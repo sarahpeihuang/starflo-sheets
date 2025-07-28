@@ -289,7 +289,7 @@ function createToolbar() {
   const title = document.createElement("img");
   title.src = chrome.runtime.getURL("starbar.jpeg");
   title.alt = "StarBar";
-  title.style.width = "120px";
+  title.style.width = "90px";
   title.style.height = "auto";
   title.style.display = "block";
 
