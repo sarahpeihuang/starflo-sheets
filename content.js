@@ -1,6 +1,7 @@
 // content.js
 let lastTopMenu = null;
 let editingMode = false;
+let titleCollapsed = false;
 
 function simulateClick(el) {
   el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
@@ -97,7 +98,6 @@ function updateQuickbar() {
             stars.forEach((star) => {
               const item = star.closest('[role="menuitem"]');
               const path = getFullMenuPath(item);
-              console.log(path);
               let flag = false;
               for (let i = 0; i < buttons.length; i++) {
                 if (buttons[i].includes(path)) {
@@ -129,11 +129,12 @@ function updateQuickbar() {
     const editContainer = bar?.editContainer;
 
     if (editButton) {
-      editButton.style.display = buttons.length === 0 ? "none" : "inline-block";
+      editButton.style.display =
+        buttons.length === 0 || titleCollapsed ? "none" : "inline-block";
     }
     if (editContainer) {
       editContainer.style.display =
-        buttons.length === 0 ? "none" : "inline-block";
+        buttons.length === 0 || titleCollapsed ? "none" : "inline-block";
     }
 
     if (editingMode) enableDragDrop(container, buttons);
@@ -287,11 +288,25 @@ function createToolbar() {
   titleBar.style.alignItems = "center";
 
   const title = document.createElement("img");
-  title.src = chrome.runtime.getURL("starbar.jpeg");
+  title.draggable = false;
   title.alt = "StarBar";
-  title.style.width = "90px";
+  title.style.width = "50px";
   title.style.height = "auto";
   title.style.display = "block";
+  title.style.cursor = "pointer";
+
+  const defaultSrc = chrome.runtime.getURL("star-default.jpeg");
+  const hoverSrc = chrome.runtime.getURL("star-hover.jpeg");
+
+  title.src = defaultSrc;
+  title.draggable = false;
+
+  title.addEventListener("mouseenter", () => {
+    title.src = hoverSrc;
+  });
+  title.addEventListener("mouseleave", () => {
+    title.src = defaultSrc;
+  });
 
   titleBar.appendChild(title);
 
@@ -314,14 +329,6 @@ function createToolbar() {
   bar.editButton = editButton;
   titleBar.appendChild(editButton);
 
-  // === Collapse button ===
-  const collapseBtn = document.createElement("button");
-  collapseBtn.innerText = "−";
-  collapseBtn.style.marginLeft = "8px";
-  collapseBtn.style.cursor = "pointer";
-
-  titleBar.appendChild(collapseBtn);
-
   // === Content container ===
   const container = document.createElement("div");
   container.id = "quickbar-buttons";
@@ -335,15 +342,47 @@ function createToolbar() {
   document.body.appendChild(bar);
 
   // === Make only the handle draggable ===
-  makeDraggable(bar, dragHandle);
+  makeDraggable(bar, title);
 
   // === Collapse/expand functionality ===
-  let collapsed = false;
-  collapseBtn.onclick = () => {
-    collapsed = !collapsed;
-    content.style.display = collapsed ? "none" : "block";
-    collapseBtn.innerText = collapsed ? "+" : "−";
-  };
+  let dragStartX = 0,
+    dragStartY = 0;
+  let isDragging = false;
+
+  title.addEventListener("mousedown", (e) => {
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    isDragging = false;
+  });
+
+  title.addEventListener("mouseup", (e) => {
+    const dx = Math.abs(e.clientX - dragStartX);
+    const dy = Math.abs(e.clientY - dragStartY);
+    if (dx < 5 && dy < 5) {
+      // Treat as click (toggle collapse)
+      titleCollapsed = !titleCollapsed;
+      updateQuickbar();
+
+      // Hide or show all children except the titleBar
+      Array.from(bar.children).forEach((child) => {
+        if (child !== titleBar) {
+          child.style.display = titleCollapsed ? "none" : "";
+        }
+      });
+
+      // Hide or show everything inside titleBar except the image
+      Array.from(titleBar.children).forEach((child) => {
+        if (child !== title) {
+          child.style.display = titleCollapsed ? "none" : "";
+        }
+      });
+
+      // Hide background and border
+      bar.style.background = titleCollapsed ? "transparent" : "#fff";
+      bar.style.border = titleCollapsed ? "none" : "1px solid #ccc";
+      bar.style.padding = titleCollapsed ? "0px" : "10px";
+    }
+  });
 
   updateQuickbar();
 }
@@ -353,10 +392,11 @@ function makeDraggable(el) {
   let offsetX, offsetY;
 
   el.addEventListener("mousedown", (e) => {
+    e.preventDefault();
     isDragging = true;
     offsetX = e.clientX - el.getBoundingClientRect().left;
     offsetY = e.clientY - el.getBoundingClientRect().top;
-    el.style.userSelect = "none"; // Prevent text selection
+    el.style.userSelect = "none";
   });
 
   document.addEventListener("mousemove", (e) => {
