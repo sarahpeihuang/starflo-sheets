@@ -34,6 +34,45 @@ function findVisibleElementByText(text) {
 }
 
 function triggerMenuPath(path) {
+  const labels = path.split(" > ").map((l) => l.trim());
+  const [first, ...rest] = labels;
+
+  // === Special case: Text color / Fill color ===
+  if (first === "Text color" || first === "Fill color") {
+    const btn = Array.from(document.querySelectorAll("[aria-label]")).find(
+      (el) => cleanText(el.getAttribute("aria-label")) === cleanText(first)
+    );
+
+    if (!btn) {
+      alert(`Could not find "${first}" button.`);
+      return;
+    }
+
+    // Step 1: Click the toolbar button
+    simulateClick(btn);
+
+    // Step 2: Wait for the color grid to appear and click the swatch
+    const targetColor = cleanText(rest.join(" > "));
+    const tryClickColor = () => {
+      const colorButtons = Array.from(
+        document.querySelectorAll("[aria-label]")
+      ).filter(
+        (el) =>
+          el.offsetParent !== null &&
+          cleanText(el.getAttribute("aria-label")) === targetColor
+      );
+
+      if (colorButtons.length > 0) {
+        simulateClick(colorButtons[0]);
+      } else {
+        alert(`Could not find color "${rest.join(" > ")}"`);
+      }
+    };
+
+    setTimeout(tryClickColor, 300);
+    return;
+  }
+
   const el = document.getElementById(path);
   if (!el) {
     alert(`Could not find menu item: "${path}"`);
