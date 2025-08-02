@@ -19,7 +19,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["star-default.jpeg", "star-hover.jpeg", "star-drag.jpeg"],
+      "resources": ["star-default.svg", "star-hover.svg", "star-drag.svg"],
       "matches": ["<all_urls>"]
     }
   ]

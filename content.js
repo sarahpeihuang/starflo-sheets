@@ -295,8 +295,8 @@ function createToolbar() {
   title.style.display = "block";
   title.style.cursor = "pointer";
 
-  const defaultSrc = chrome.runtime.getURL("star-default.jpeg");
-  const hoverSrc = chrome.runtime.getURL("star-hover.jpeg");
+  const defaultSrc = chrome.runtime.getURL("star-default.svg");
+  const hoverSrc = chrome.runtime.getURL("star-hover.svg");
 
   title.src = defaultSrc;
   title.draggable = false;
