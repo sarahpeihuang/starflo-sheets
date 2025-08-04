@@ -98,7 +98,7 @@ function updateQuickbar() {
     const container = document.getElementById("quickbar-buttons");
     container.innerHTML = "";
     buttons.forEach((func, index) => {
-      //const funcList = String(func).trim().split(">");
+      const funcList = String(func).trim().split(">");
       const wrapper = document.createElement("div");
       wrapper.className = "quickbar-button";
       wrapper.setAttribute("draggable", editingMode);
@@ -107,7 +107,10 @@ function updateQuickbar() {
       wrapper.style.alignItems = "center";
 
       const btn = document.createElement("button");
-      btn.innerText = func;
+      const btnText =
+        funcList[funcList.length - 1].trim().slice(0, 1).toUpperCase() +
+        funcList[funcList.length - 1].trim().slice(1);
+      btn.innerText = btnText;
       Object.assign(btn.style, {
         background: "#4285f4",
         color: "#fff",
