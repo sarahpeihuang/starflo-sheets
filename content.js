@@ -256,8 +256,6 @@ function injectStarsIntoMenu(menu) {
       const path = getFullMenuPath(item);
       if (!path) return;
 
-      console.log(path);
-
       const star = document.createElement("span");
       star.className = "pin-star";
       star.textContent = pinned.includes(path) ? "⭐" : "☆";
@@ -311,17 +309,19 @@ function createToolbar() {
   bar.style.cursor = "default"; // Only handle is draggable
 
   // === Draggable handle bar ===
-  const dragHandle = document.createElement("div");
+  const dragHandleWrapper = document.createElement("div");
+  dragHandleWrapper.style.display = "flex";
+  dragHandleWrapper.style.justifyContent = "center";
 
-  dragHandle.style.margin = "0 auto 4px auto";
-  dragHandle.style.height = "2px";
-  dragHandle.style.width = "50%";
-  dragHandle.style.background = "#bbb";
-  dragHandle.style.borderRadius = "4px";
+  const dragHandle = document.createElement("img");
+  dragHandle.src = chrome.runtime.getURL("gripper.svg");
+  dragHandle.alt = "Gripper";
+  dragHandle.style.width = "15px";
   dragHandle.style.cursor = "move";
-  dragHandle.style.marginBottom = "4px";
-  dragHandle.title = "Drag to move";
-  bar.appendChild(dragHandle);
+  dragHandle.draggable = false;
+
+  dragHandleWrapper.appendChild(dragHandle);
+  bar.appendChild(dragHandleWrapper);
 
   // === Title bar ===
   const titleBar = document.createElement("div");
