@@ -3,6 +3,19 @@ let lastTopMenu = null;
 let editingMode = false;
 let titleCollapsed = false;
 
+function checkAndRunOnboarding() {
+  chrome.storage.local.get(['hasSeenOnboarding'], (result) => {
+    if (!result.hasSeenOnboarding) {
+      // Wait a bit for the page to fully load, then start the tour
+      setTimeout(() => {
+        if (typeof runOnboardingTour === 'function') {
+          runOnboardingTour();
+        }
+      }, 2000);
+    }
+  });
+}
+
 function simulateClick(el) {
   el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
   el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
@@ -111,6 +124,10 @@ function updateQuickbar() {
         funcList[funcList.length - 1].trim().slice(0, 1).toUpperCase() +
         funcList[funcList.length - 1].trim().slice(1);
       btn.innerText = btnText;
+      // For the onboarding tour, give the 'Import' button a specific, stable ID.
+      if (func.toLowerCase() === 'file > import') {
+        wrapper.id = 'tour-import-button-wrapper'; 
+      }
       Object.assign(btn.style, {
         background: "#4285f4",
         color: "#fff",
@@ -354,6 +371,7 @@ function createToolbar() {
 
   // === Edit button ===
   const editButton = document.createElement("button");
+  editButton.id = "starbar-edit-button";
   editButton.innerText = "✏️";
   editButton.style.border = "none";
   editButton.style.background = "transparent";
@@ -458,6 +476,7 @@ function makeDraggable(el) {
 window.addEventListener("load", () => {
   createToolbar();
   observeMenus();
+  checkAndRunOnboarding();
 });
 
 window.addEventListener("contextmenu", (e) => {

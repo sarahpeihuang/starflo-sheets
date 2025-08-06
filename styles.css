@@ -1,3 +1,155 @@
+/* === Main Tooltip Container === */
+.starbar-tour-theme .introjs-tooltip {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  background-color: #fff;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+  color: #3c4043;
+  padding: 20px 24px;
+  max-width: 360px;
+  position: relative;
+  transition: all 0.25s ease;
+}
+
+/* === Tooltip Header === */
+.starbar-tour-theme .introjs-tooltip-header {
+  padding-top: 24px; /* room for progress bar */
+}
+
+/* === Tooltip Title === */
+.starbar-tour-theme .introjs-tooltip-title {
+  font-weight: 600;
+  font-size: 18px;
+  color: #202124;
+  margin-bottom: 10px;
+}
+
+/* === Tooltip Body Text === */
+.starbar-tour-theme .introjs-tooltiptext {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #3c4043;
+}
+
+/* === Buttons === */
+.starbar-tour-theme .introjs-button {
+  background-color: #1a73e8;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+  appearance: none;
+  
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.004);
+}
+/* Prevent any blurriness or ghost effect */
+.starbar-tour-theme .introjs-button:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.3);
+}
+
+.starbar-tour-theme .introjs-button:hover {
+  background-color: #1558d6;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+/* === Back Button === */
+.starbar-tour-theme .introjs-prevbutton {
+  background-color: #f8f9fa;
+  color: #5f6368;
+  border: 1px solid #dadce0;
+  margin-right: 10px;
+}
+
+.starbar-tour-theme .introjs-prevbutton:hover {
+  background-color: #f1f3f4;
+  color: #202124;
+}
+
+/* === Skip Button === */
+.starbar-tour-theme .introjs-skipbutton {
+  color: #5f6368;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.starbar-tour-theme .introjs-skipbutton:hover {
+  color: #202124;
+}
+
+/* === Progress Bar === */
+.starbar-tour-theme .introjs-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background-color: #e8eaed;
+  border-radius: 12px 12px 0 0;
+  overflow: hidden;
+  margin: 0;
+}
+
+.starbar-tour-theme .introjs-progressbar {
+  background-color: #1a73e8;
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+/* === Step Counter (e.g., Step 3 of 6) === */
+.starbar-tour-theme .introjs-helperNumberLayer {
+  position: absolute;
+  bottom: 12px;
+  left: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #5f6368;
+}
+
+/* === Button Container Adjustment for Step Counter === */
+.starbar-tour-theme .introjs-tooltipbuttons {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding-left: 80px;
+  padding-top: 12px;
+}
+
+/* === Hide Bullet Navigation for Clean Look === */
+.starbar-tour-theme .introjs-bullets {
+  display: none;
+}
+
+/* === Hide Next Button for Specific Steps === */
+.starbar-tour-theme.introjs-step-2 .introjs-nextbutton,
+.starbar-tour-theme.introjs-step-3 .introjs-nextbutton,
+.starbar-tour-theme.introjs-step-7 .introjs-nextbutton {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* === Ensure Back Button is Visible When Needed === */
+.starbar-tour-theme.introjs-step-3 .introjs-prevbutton {
+  display: inline-block !important;
+  visibility: visible !important;
+}
+
+/* === StarBar Hover === */
 #gs-hotbar button:hover {
   background: #174ea6;
-} 
+  color: #fff;
+  transition: background 0.2s ease;
+}

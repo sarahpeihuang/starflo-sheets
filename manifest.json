@@ -13,15 +13,22 @@
   "content_scripts": [
     {
       "matches": ["https://docs.google.com/spreadsheets/*"],
-      "js": ["content.js"],
-      "css": ["styles.css"]
+      "js": [
+        "intro.js",
+        "onboarding.js", 
+        "content.js"
+      ],
+      "css": [
+        "intro.css",
+        "styles.css"
+      ]
     }
   ],
   "web_accessible_resources": [
     {
       "resources": [
         "star-default.svg",
-        "star-hover.svg",
+        "star-hover.svg", 
         "star-drag.svg",
         "gripper.svg"
       ],
