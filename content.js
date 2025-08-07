@@ -308,25 +308,11 @@ function createToolbar() {
   bar.style.zIndex = 9999;
   bar.style.cursor = "default"; // Only handle is draggable
 
-  // === Draggable handle bar ===
-  const dragHandleWrapper = document.createElement("div");
-  dragHandleWrapper.style.display = "flex";
-  dragHandleWrapper.style.justifyContent = "center";
-
-  const dragHandle = document.createElement("img");
-  dragHandle.src = chrome.runtime.getURL("gripper.svg");
-  dragHandle.alt = "Gripper";
-  dragHandle.style.width = "15px";
-  dragHandle.style.cursor = "move";
-  dragHandle.draggable = false;
-
-  dragHandleWrapper.appendChild(dragHandle);
-  bar.appendChild(dragHandleWrapper);
-
   // === Title bar ===
   const titleBar = document.createElement("div");
   titleBar.style.display = "flex";
   titleBar.style.justifyContent = "space-between";
+  titleBar.style.gap = "5px";
   titleBar.style.alignItems = "center";
 
   const title = document.createElement("img");
@@ -351,6 +337,22 @@ function createToolbar() {
   });
 
   titleBar.appendChild(title);
+
+  // === Draggable handle bar ===
+  const dragHandleWrapper = document.createElement("div");
+  dragHandleWrapper.style.display = "flex";
+  dragHandleWrapper.style.justifyContent = "center";
+
+  const dragHandle = document.createElement("img");
+  dragHandle.src = chrome.runtime.getURL("gripper.svg");
+  dragHandle.alt = "Gripper";
+  dragHandle.style.width = "15px";
+  dragHandle.style.cursor = "move";
+  dragHandle.draggable = false;
+
+  dragHandleWrapper.appendChild(dragHandle);
+
+  titleBar.appendChild(dragHandleWrapper);
 
   // === Edit button ===
   const editButton = document.createElement("button");
