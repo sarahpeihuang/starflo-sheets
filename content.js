@@ -128,6 +128,7 @@ function updateQuickbar() {
 
       // Add hover effects
       if (!editingMode) {
+        btn.onclick = () => triggerMenuPath(func);
         btn.addEventListener("mouseenter", () => {
           btn.style.backgroundColor = "#D9D9D9";
         });
