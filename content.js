@@ -312,13 +312,13 @@ function createToolbar() {
   const titleBar = document.createElement("div");
   titleBar.style.display = "flex";
   titleBar.style.justifyContent = "space-between";
-  titleBar.style.gap = "5px";
+  titleBar.style.gap = "25px";
   titleBar.style.alignItems = "center";
 
   const title = document.createElement("img");
   title.draggable = false;
   title.alt = "StarBar";
-  title.style.width = "50px";
+  title.style.width = "45px";
   title.style.height = "auto";
   title.style.display = "block";
   title.style.cursor = "pointer";
@@ -346,7 +346,7 @@ function createToolbar() {
   const dragHandle = document.createElement("img");
   dragHandle.src = chrome.runtime.getURL("gripper.svg");
   dragHandle.alt = "Gripper";
-  dragHandle.style.width = "15px";
+  dragHandle.style.width = "25px";
   dragHandle.style.cursor = "move";
   dragHandle.draggable = false;
 
@@ -360,8 +360,8 @@ function createToolbar() {
   editButton.style.border = "none";
   editButton.style.background = "transparent";
   editButton.style.cursor = "pointer";
-  editButton.style.fontSize = "16px";
-  editButton.style.marginLeft = "8px";
+  editButton.style.fontSize = "18px";
+  editButton.style.marginLeft = "1px";
   editButton.style.display = "none";
 
   editButton.onclick = () => {
