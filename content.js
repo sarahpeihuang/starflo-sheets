@@ -112,15 +112,29 @@ function updateQuickbar() {
         funcList[funcList.length - 1].trim().slice(1);
       btn.innerText = btnText;
       Object.assign(btn.style, {
-        background: "#4285f4",
-        color: "#fff",
-        border: "none",
-        borderRadius: "4px",
-        padding: "6px 12px",
+        background: "#ffffff",
+        color: "#454444",
+        border: "0px solid #e0e0e0",
+        borderRadius: "40px",
+        padding: "6px 1px",
         cursor: editingMode ? "default" : "pointer",
         flexGrow: 1,
+        width: "100%",
+        textAlign: "center",
+        transition: "background-color 0.2s ease",
+        fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
       });
-      if (!editingMode) btn.onclick = () => triggerMenuPath(func);
+
+
+      // Add hover effects
+      if (!editingMode) {
+        btn.addEventListener("mouseenter", () => {
+          btn.style.backgroundColor = "#D9D9D9";
+        });
+        btn.addEventListener("mouseleave", () => {
+          btn.style.backgroundColor = "#ffffff";
+        });
+      }
 
       if (editingMode) {
         const drag = document.createElement("span");
