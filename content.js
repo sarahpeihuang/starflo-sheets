@@ -110,7 +110,47 @@ function updateQuickbar() {
       const btnText =
         funcList[funcList.length - 1].trim().slice(0, 1).toUpperCase() +
         funcList[funcList.length - 1].trim().slice(1);
-      btn.innerText = btnText;
+
+      let iconSrc = null;
+
+      if (func.includes("Fill color")) {
+        iconSrc = chrome.runtime.getURL("fill.svg");
+      } else if (func.includes("Text color")) {
+        iconSrc = chrome.runtime.getURL("A.svg");
+      }
+
+      if (iconSrc) {
+        const iconImg = document.createElement("img");
+        iconImg.src = iconSrc;
+        iconImg.alt = "";
+        iconImg.style.width = "16px";
+        iconImg.style.height = "16px";
+        iconImg.style.marginRight = "6px";
+        iconImg.style.verticalAlign = "middle";
+
+        // Wrap text so icon and label align nicely
+        const textWrapper = document.createElement("span");
+        textWrapper.innerText = btnText;
+
+        btn.innerText = "";
+        btn.style.display = "flex";
+        btn.style.alignItems = "center";
+        btn.style.justifyContent = "flex-start";
+
+        iconImg.style.width = "16px";
+        iconImg.style.height = "16px";
+        iconImg.style.marginRight = "6px";
+        iconImg.style.flexShrink = "0";
+
+        textWrapper.style.flexGrow = "1";
+        textWrapper.style.textAlign = "center";
+
+        btn.appendChild(iconImg);
+        btn.appendChild(textWrapper);
+        
+      } else {
+        btn.innerText = btnText; // fallback for non-color buttons
+      }
       Object.assign(btn.style, {
         background: "#ffffff",
         color: "#454444",
