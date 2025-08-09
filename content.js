@@ -112,15 +112,30 @@ function updateQuickbar() {
         funcList[funcList.length - 1].trim().slice(1);
       btn.innerText = btnText;
       Object.assign(btn.style, {
-        background: "#4285f4",
-        color: "#fff",
-        border: "none",
-        borderRadius: "4px",
-        padding: "6px 12px",
+        background: "#ffffff",
+        color: "#454444",
+        border: "0px solid #e0e0e0",
+        borderRadius: "40px",
+        padding: "6px 1px",
         cursor: editingMode ? "default" : "pointer",
         flexGrow: 1,
+        width: "100%",
+        textAlign: "center",
+        transition: "background-color 0.2s ease",
+        fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
       });
-      if (!editingMode) btn.onclick = () => triggerMenuPath(func);
+
+
+      // Add hover effects
+      if (!editingMode) {
+        btn.onclick = () => triggerMenuPath(func);
+        btn.addEventListener("mouseenter", () => {
+          btn.style.backgroundColor = "#D9D9D9";
+        });
+        btn.addEventListener("mouseleave", () => {
+          btn.style.backgroundColor = "#ffffff";
+        });
+      }
 
       if (editingMode) {
         const drag = document.createElement("span");
@@ -312,13 +327,13 @@ function createToolbar() {
   const titleBar = document.createElement("div");
   titleBar.style.display = "flex";
   titleBar.style.justifyContent = "space-between";
-  titleBar.style.gap = "5px";
+  titleBar.style.gap = "25px";
   titleBar.style.alignItems = "center";
 
   const title = document.createElement("img");
   title.draggable = false;
   title.alt = "StarBar";
-  title.style.width = "50px";
+  title.style.width = "45px";
   title.style.height = "auto";
   title.style.display = "block";
   title.style.cursor = "pointer";
@@ -346,7 +361,7 @@ function createToolbar() {
   const dragHandle = document.createElement("img");
   dragHandle.src = chrome.runtime.getURL("gripper.svg");
   dragHandle.alt = "Gripper";
-  dragHandle.style.width = "15px";
+  dragHandle.style.width = "25px";
   dragHandle.style.cursor = "move";
   dragHandle.draggable = false;
 
@@ -360,8 +375,8 @@ function createToolbar() {
   editButton.style.border = "none";
   editButton.style.background = "transparent";
   editButton.style.cursor = "pointer";
-  editButton.style.fontSize = "16px";
-  editButton.style.marginLeft = "8px";
+  editButton.style.fontSize = "18px";
+  editButton.style.marginLeft = "1px";
   editButton.style.display = "none";
 
   editButton.onclick = () => {
