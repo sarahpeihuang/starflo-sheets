@@ -487,9 +487,9 @@ window.addEventListener("contextmenu", (e) => {
     '[aria-label*="Fill color"], [aria-label*="Text color"]'
   );
   if (parent?.getAttribute("aria-label")?.includes("Fill"))
-    prefix = "Fill color";
-  if (parent?.getAttribute("aria-label")?.includes("Text"))
     prefix = "Text color";
+  if (parent?.getAttribute("aria-label")?.includes("Text"))
+    prefix = "Fill color";
 
   const path = `${prefix} > ${label}`;
 
