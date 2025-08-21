@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Google Sheets Quickbar",
+  "name": "StarFlo",
   "version": "1.0",
   "permissions": ["storage", "scripting", "activeTab", "contextMenus"],
   "host_permissions": ["https://docs.google.com/spreadsheets/*"],
