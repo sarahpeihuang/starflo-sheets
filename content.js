@@ -147,7 +147,6 @@ function updateQuickbar() {
 
         btn.appendChild(iconImg);
         btn.appendChild(textWrapper);
-        
       } else {
         btn.innerText = btnText; // fallback for non-color buttons
       }
@@ -162,9 +161,9 @@ function updateQuickbar() {
         width: "100%",
         textAlign: "center",
         transition: "background-color 0.2s ease",
-        fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        fontFamily:
+          "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
       });
-
 
       // Add hover effects
       if (!editingMode) {
@@ -440,8 +439,9 @@ function createToolbar() {
   bar.appendChild(content);
   document.body.appendChild(bar);
 
-  // === Make only the handle draggable ===
-  makeDraggable(bar, title);
+  // === Make only the star and gripper draggable ===
+  makeDraggable(title, bar); // star icon
+  makeDraggable(dragHandle, bar); // gripper icon
 
   // === Collapse/expand functionality ===
   let dragStartX = 0,
@@ -486,29 +486,29 @@ function createToolbar() {
   updateQuickbar();
 }
 
-function makeDraggable(el) {
+function makeDraggable(handle, target) {
   let isDragging = false;
   let offsetX, offsetY;
 
-  el.addEventListener("mousedown", (e) => {
+  handle.addEventListener("mousedown", (e) => {
     e.preventDefault();
     isDragging = true;
-    offsetX = e.clientX - el.getBoundingClientRect().left;
-    offsetY = e.clientY - el.getBoundingClientRect().top;
-    el.style.userSelect = "none";
+    offsetX = e.clientX - target.getBoundingClientRect().left;
+    offsetY = e.clientY - target.getBoundingClientRect().top;
+    target.style.userSelect = "none";
   });
 
   document.addEventListener("mousemove", (e) => {
     if (isDragging) {
-      el.style.left = e.clientX - offsetX + "px";
-      el.style.top = e.clientY - offsetY + "px";
-      el.style.right = "auto"; // Reset right when dragging
+      target.style.left = e.clientX - offsetX + "px";
+      target.style.top = e.clientY - offsetY + "px";
+      target.style.right = "auto"; // Reset right when dragging
     }
   });
 
   document.addEventListener("mouseup", () => {
     isDragging = false;
-    el.style.userSelect = "auto";
+    target.style.userSelect = "auto";
   });
 }
 
