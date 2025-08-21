@@ -255,9 +255,10 @@ function enableDragDrop(container, data) {
   });
 
   container.addEventListener("drop", () => {
-    const newOrder = [...container.children].map(
-      (el) => el.querySelector("button").innerText
-    );
+    const newOrder = [...container.children].map((el) => {
+      const idx = el.dataset.index;
+      return data[idx]; // preserve the full path from the original data array
+    });
     chrome.storage.local.set({ pinnedFunctions: newOrder }, updateQuickbar);
   });
 }
