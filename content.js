@@ -73,13 +73,16 @@ function triggerMenuPath(path) {
     return;
   }
 
-  const el = document.getElementById(path);
-  if (!el) {
-    alert(`Could not find menu item: "${path}"`);
-    return;
+  var btn = document.getElementById(path);
+
+  // Else case
+  if (!btn) {
+    btn = Array.from(
+      document.querySelectorAll('div[role="menubar"] [role="menuitem"]')
+    ).find((el) => cleanText(el.textContent) === cleanText(first));
   }
 
-  simulateClick(el);
+  simulateClick(btn);
 }
 
 function togglePin(path) {
