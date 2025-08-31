@@ -60,7 +60,7 @@ function triggerMenuPath(path) {
       }
     };
 
-    setTimeout(tryClickColor(), 300);
+    tryClickColor();
     return;
   }
 
