@@ -3,12 +3,14 @@ let lastTopMenu = null;
 let editingMode = false;
 let titleCollapsed = false;
 
+// Helper function that simulates click action
 function simulateClick(el) {
   el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
   el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
   el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 }
 
+// Helper function that parses through stars
 function cleanText(text) {
   return (
     text
@@ -21,18 +23,7 @@ function cleanText(text) {
   );
 }
 
-function findVisibleElementByText(text) {
-  const elements = Array.from(document.querySelectorAll('[role="menuitem"]'));
-  const target = cleanText(text);
-
-  return elements.find((el) => {
-    if (el.offsetParent === null) return false;
-    const raw =
-      el.querySelector(".goog-menuitem-content")?.textContent || el.textContent;
-    return cleanText(raw) === target;
-  });
-}
-
+// Callback function that triggers when tooltip button is clicked
 function triggerMenuPath(path) {
   const labels = path.split(" > ").map((l) => l.trim());
   const [first, ...rest] = labels;
@@ -69,7 +60,7 @@ function triggerMenuPath(path) {
       }
     };
 
-    setTimeout(tryClickColor, 300);
+    setTimeout(tryClickColor(), 300);
     return;
   }
 
@@ -77,14 +68,15 @@ function triggerMenuPath(path) {
 
   // Else case
   if (!btn) {
-    btn = Array.from(
-      document.querySelectorAll('div[role="menubar"] [role="menuitem"]')
-    ).find((el) => cleanText(el.textContent) === cleanText(first));
+    btn = Array.from(document.querySelectorAll('[role="menuitem"]')).find(
+      (el) => cleanText(el.textContent) === cleanText(labels[0])
+    );
   }
 
   simulateClick(btn);
 }
 
+// Helper function that implements toggle functionality for editing and deleting
 function togglePin(path) {
   chrome.storage.local.get("pinnedFunctions", (data) => {
     let pins = data.pinnedFunctions || [];
@@ -95,6 +87,7 @@ function togglePin(path) {
   });
 }
 
+// Callback function that manages state
 function updateQuickbar() {
   chrome.storage.local.get("pinnedFunctions", (data) => {
     const buttons = data.pinnedFunctions || [];
@@ -240,6 +233,7 @@ function updateQuickbar() {
   });
 }
 
+// Functionality for dragging tooltip children
 function enableDragDrop(container, data) {
   let draggingEl;
   container.addEventListener("dragstart", (e) => {
@@ -266,6 +260,7 @@ function enableDragDrop(container, data) {
   });
 }
 
+// Helper function that gets the full menu path of a div component
 function getFullMenuPath(item) {
   let label = cleanText(
     item.querySelector(".goog-menuitem-content")?.textContent ||
@@ -295,6 +290,7 @@ function getFullMenuPath(item) {
   return path.join(" > ");
 }
 
+// Injects stars into menus
 function injectStarsIntoMenu(menu) {
   const items = menu.querySelectorAll('[role="menuitem"]');
 
@@ -339,6 +335,7 @@ function injectStarsIntoMenu(menu) {
   });
 }
 
+// Setup function on load
 function observeMenus() {
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
@@ -490,6 +487,7 @@ function createToolbar() {
   updateQuickbar();
 }
 
+// Function that allows certain components to be draggable
 function makeDraggable(handle, target) {
   let isDragging = false;
   let offsetX, offsetY;
