@@ -71,9 +71,9 @@ function triggerMenuPath(path) {
     btn = Array.from(document.querySelectorAll('[role="menuitem"]')).find(
       (el) => cleanText(el.textContent) === cleanText(labels[0])
     );
+  } else {
+    simulateClick(btn);
   }
-
-  simulateClick(btn);
 }
 
 // Helper function that implements toggle functionality for editing and deleting
@@ -514,9 +514,61 @@ function makeDraggable(handle, target) {
   });
 }
 
+function preloadAllMenus() {
+  const topMenus = document.querySelectorAll(
+    'div[role="menubar"] [role="menuitem"]'
+  );
+
+  let index = 0;
+
+  function openMenu(menuBtn, callback) {
+    simulateClick(menuBtn); // open it
+    setTimeout(() => {
+      const submenus = document.querySelectorAll('[role="menu"]');
+
+      // preload each submenu by clicking its items that have children
+      const submenuItems = Array.from(
+        submenus[submenus.length - 1]?.querySelectorAll(
+          '[role="menuitem"][aria-haspopup="true"]'
+        ) || []
+      );
+
+      let subIndex = 0;
+      function openSubmenu() {
+        if (subIndex >= submenuItems.length) {
+          simulateClick(menuBtn); // close parent
+          callback();
+          return;
+        }
+        const item = submenuItems[subIndex];
+        simulateClick(item); // open inner submenu
+        setTimeout(() => {
+          simulateClick(item); // close it
+          subIndex++;
+          openSubmenu();
+        }, 200);
+      }
+
+      openSubmenu();
+    }, 200);
+  }
+
+  function nextTopMenu() {
+    if (index >= topMenus.length) return;
+    const btn = topMenus[index];
+    openMenu(btn, () => {
+      index++;
+      setTimeout(nextTopMenu, 200);
+    });
+  }
+
+  nextTopMenu();
+}
+
 window.addEventListener("load", () => {
   createToolbar();
   observeMenus();
+  preloadAllMenus();
 });
 
 window.addEventListener("contextmenu", (e) => {
