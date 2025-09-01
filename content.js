@@ -64,15 +64,51 @@ function triggerMenuPath(path) {
     return;
   }
 
+  function openMenu(menuBtn) {
+    simulateClick(menuBtn); // open it
+    setTimeout(() => {
+      const submenus = document.querySelectorAll('[role="menu"]');
+
+      // preload each submenu by clicking its items that have children
+      const submenuItems = Array.from(
+        submenus[submenus.length - 1]?.querySelectorAll(
+          '[role="menuitem"][aria-haspopup="true"]'
+        ) || []
+      );
+
+      let subIndex = 0;
+      function openSubmenu() {
+        if (subIndex >= submenuItems.length) {
+          simulateClick(menuBtn); // close parent
+          return;
+        }
+        const item = submenuItems[subIndex];
+        simulateClick(item); // open inner submenu
+        setTimeout(() => {
+          simulateClick(item); // close it
+          subIndex++;
+          openSubmenu();
+        }, 200);
+      }
+
+      openSubmenu();
+    }, 200);
+  }
+
   var btn = document.getElementById(path);
 
   // Else case
   if (!btn) {
-    btn = Array.from(document.querySelectorAll('[role="menuitem"]')).find(
-      (el) => cleanText(el.textContent) === cleanText(labels[0])
-    );
+    var btnMenu = Array.from(
+      document.querySelectorAll('[role="menuitem"]')
+    ).find((el) => cleanText(el.textContent) === cleanText(labels[0]));
+
+    openMenu(btnMenu);
+    setTimeout(() => triggerMenuPath(path), 100);
   } else {
-    simulateClick(btn);
+    setTimeout(() => {
+      simulateClick(btn);
+    }, 100);
   }
 }
 
@@ -568,7 +604,7 @@ function preloadAllMenus() {
 window.addEventListener("load", () => {
   createToolbar();
   observeMenus();
-  preloadAllMenus();
+  // preloadAllMenus();
 });
 
 window.addEventListener("contextmenu", (e) => {
