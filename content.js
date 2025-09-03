@@ -3,6 +3,19 @@ let lastTopMenu = null;
 let editingMode = false;
 let titleCollapsed = false;
 
+function checkAndRunOnboarding() {
+  chrome.storage.local.get(['hasSeenOnboarding'], (result) => {
+    if (!result.hasSeenOnboarding) {
+      // Wait a bit for the page to fully load, then start the tour
+      setTimeout(() => {
+        if (typeof runOnboardingTour === 'function') {
+          runOnboardingTour();
+        }
+      }, 2000);
+    }
+  });
+}
+
 // Helper function that simulates click action
 function simulateClick(el) {
   el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
@@ -142,6 +155,10 @@ function updateQuickbar() {
       const btnText =
         funcList[funcList.length - 1].trim().slice(0, 1).toUpperCase() +
         funcList[funcList.length - 1].trim().slice(1);
+      btn.innerText = btnText;
+      // For the onboarding tour, give the 'Import' button a specific, stable ID.
+      if (func.toLowerCase() === 'file > import') {
+        wrapper.id = 'tour-import-button-wrapper'; 
 
       let iconSrc = null;
 
@@ -447,6 +464,7 @@ function createToolbar() {
 
   // === Edit button ===
   const editButton = document.createElement("button");
+  editButton.id = "starbar-edit-button";
   editButton.innerText = "✏️";
   editButton.style.border = "none";
   editButton.style.background = "transparent";
@@ -604,6 +622,7 @@ function preloadAllMenus() {
 window.addEventListener("load", () => {
   createToolbar();
   observeMenus();
+  checkAndRunOnboarding();
   // preloadAllMenus();
 });
 
