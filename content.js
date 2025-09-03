@@ -16,12 +16,14 @@ function checkAndRunOnboarding() {
   });
 }
 
+// Helper function that simulates click action
 function simulateClick(el) {
   el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
   el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
   el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 }
 
+// Helper function that parses through stars
 function cleanText(text) {
   return (
     text
@@ -34,18 +36,7 @@ function cleanText(text) {
   );
 }
 
-function findVisibleElementByText(text) {
-  const elements = Array.from(document.querySelectorAll('[role="menuitem"]'));
-  const target = cleanText(text);
-
-  return elements.find((el) => {
-    if (el.offsetParent === null) return false;
-    const raw =
-      el.querySelector(".goog-menuitem-content")?.textContent || el.textContent;
-    return cleanText(raw) === target;
-  });
-}
-
+// Callback function that triggers when tooltip button is clicked
 function triggerMenuPath(path) {
   const labels = path.split(" > ").map((l) => l.trim());
   const [first, ...rest] = labels;
@@ -82,19 +73,59 @@ function triggerMenuPath(path) {
       }
     };
 
-    setTimeout(tryClickColor, 300);
+    tryClickColor();
     return;
   }
 
-  const el = document.getElementById(path);
-  if (!el) {
-    alert(`Could not find menu item: "${path}"`);
-    return;
+  function openMenu(menuBtn) {
+    simulateClick(menuBtn); // open it
+    setTimeout(() => {
+      const submenus = document.querySelectorAll('[role="menu"]');
+
+      // preload each submenu by clicking its items that have children
+      const submenuItems = Array.from(
+        submenus[submenus.length - 1]?.querySelectorAll(
+          '[role="menuitem"][aria-haspopup="true"]'
+        ) || []
+      );
+
+      let subIndex = 0;
+      function openSubmenu() {
+        if (subIndex >= submenuItems.length) {
+          simulateClick(menuBtn); // close parent
+          return;
+        }
+        const item = submenuItems[subIndex];
+        simulateClick(item); // open inner submenu
+        setTimeout(() => {
+          simulateClick(item); // close it
+          subIndex++;
+          openSubmenu();
+        }, 200);
+      }
+
+      openSubmenu();
+    }, 200);
   }
 
-  simulateClick(el);
+  var btn = document.getElementById(path);
+
+  // Else case
+  if (!btn) {
+    var btnMenu = Array.from(
+      document.querySelectorAll('[role="menuitem"]')
+    ).find((el) => cleanText(el.textContent) === cleanText(labels[0]));
+
+    openMenu(btnMenu);
+    setTimeout(() => triggerMenuPath(path), 100);
+  } else {
+    setTimeout(() => {
+      simulateClick(btn);
+    }, 100);
+  }
 }
 
+// Helper function that implements toggle functionality for editing and deleting
 function togglePin(path) {
   chrome.storage.local.get("pinnedFunctions", (data) => {
     let pins = data.pinnedFunctions || [];
@@ -105,6 +136,7 @@ function togglePin(path) {
   });
 }
 
+// Callback function that manages state
 function updateQuickbar() {
   chrome.storage.local.get("pinnedFunctions", (data) => {
     const buttons = data.pinnedFunctions || [];
@@ -127,17 +159,71 @@ function updateQuickbar() {
       // For the onboarding tour, give the 'Import' button a specific, stable ID.
       if (func.toLowerCase() === 'file > import') {
         wrapper.id = 'tour-import-button-wrapper'; 
+
+      let iconSrc = null;
+
+      if (func.includes("Fill color")) {
+        iconSrc = chrome.runtime.getURL("fill.svg");
+      } else if (func.includes("Text color")) {
+        iconSrc = chrome.runtime.getURL("A.svg");
+      }
+
+      if (iconSrc) {
+        const iconImg = document.createElement("img");
+        iconImg.src = iconSrc;
+        iconImg.alt = "";
+        iconImg.style.width = "16px";
+        iconImg.style.height = "16px";
+        iconImg.style.marginRight = "6px";
+        iconImg.style.verticalAlign = "middle";
+
+        // Wrap text so icon and label align nicely
+        const textWrapper = document.createElement("span");
+        textWrapper.innerText = btnText;
+
+        btn.innerText = "";
+        btn.style.display = "flex";
+        btn.style.alignItems = "center";
+        btn.style.justifyContent = "flex-start";
+
+        iconImg.style.width = "16px";
+        iconImg.style.height = "16px";
+        iconImg.style.marginRight = "6px";
+        iconImg.style.flexShrink = "0";
+
+        textWrapper.style.flexGrow = "1";
+        textWrapper.style.textAlign = "center";
+
+        btn.appendChild(iconImg);
+        btn.appendChild(textWrapper);
+      } else {
+        btn.innerText = btnText; // fallback for non-color buttons
       }
       Object.assign(btn.style, {
-        background: "#4285f4",
-        color: "#fff",
-        border: "none",
-        borderRadius: "4px",
-        padding: "6px 12px",
+        background: "#ffffff",
+        color: "#454444",
+        border: "0px solid #e0e0e0",
+        borderRadius: "40px",
+        padding: "6px 1px",
         cursor: editingMode ? "default" : "pointer",
         flexGrow: 1,
+        width: "100%",
+        textAlign: "center",
+        transition: "background-color 0.2s ease",
+        fontFamily:
+          "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
       });
-      if (!editingMode) btn.onclick = () => triggerMenuPath(func);
+
+      // Add hover effects
+      if (!editingMode) {
+        btn.onclick = () => triggerMenuPath(func);
+        btn.addEventListener("mouseenter", () => {
+          btn.style.backgroundColor = "#D9D9D9";
+        });
+        btn.addEventListener("mouseleave", () => {
+          btn.style.backgroundColor = "#ffffff";
+        });
+      }
 
       if (editingMode) {
         const drag = document.createElement("span");
@@ -200,6 +286,7 @@ function updateQuickbar() {
   });
 }
 
+// Functionality for dragging tooltip children
 function enableDragDrop(container, data) {
   let draggingEl;
   container.addEventListener("dragstart", (e) => {
@@ -218,13 +305,15 @@ function enableDragDrop(container, data) {
   });
 
   container.addEventListener("drop", () => {
-    const newOrder = [...container.children].map(
-      (el) => el.querySelector("button").innerText
-    );
+    const newOrder = [...container.children].map((el) => {
+      const idx = el.dataset.index;
+      return data[idx]; // preserve the full path from the original data array
+    });
     chrome.storage.local.set({ pinnedFunctions: newOrder }, updateQuickbar);
   });
 }
 
+// Helper function that gets the full menu path of a div component
 function getFullMenuPath(item) {
   let label = cleanText(
     item.querySelector(".goog-menuitem-content")?.textContent ||
@@ -254,6 +343,7 @@ function getFullMenuPath(item) {
   return path.join(" > ");
 }
 
+// Injects stars into menus
 function injectStarsIntoMenu(menu) {
   const items = menu.querySelectorAll('[role="menuitem"]');
 
@@ -298,6 +388,7 @@ function injectStarsIntoMenu(menu) {
   });
 }
 
+// Setup function on load
 function observeMenus() {
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
@@ -325,31 +416,17 @@ function createToolbar() {
   bar.style.zIndex = 9999;
   bar.style.cursor = "default"; // Only handle is draggable
 
-  // === Draggable handle bar ===
-  const dragHandleWrapper = document.createElement("div");
-  dragHandleWrapper.style.display = "flex";
-  dragHandleWrapper.style.justifyContent = "center";
-
-  const dragHandle = document.createElement("img");
-  dragHandle.src = chrome.runtime.getURL("gripper.svg");
-  dragHandle.alt = "Gripper";
-  dragHandle.style.width = "15px";
-  dragHandle.style.cursor = "move";
-  dragHandle.draggable = false;
-
-  dragHandleWrapper.appendChild(dragHandle);
-  bar.appendChild(dragHandleWrapper);
-
   // === Title bar ===
   const titleBar = document.createElement("div");
   titleBar.style.display = "flex";
   titleBar.style.justifyContent = "space-between";
+  titleBar.style.gap = "25px";
   titleBar.style.alignItems = "center";
 
   const title = document.createElement("img");
   title.draggable = false;
   title.alt = "StarBar";
-  title.style.width = "50px";
+  title.style.width = "45px";
   title.style.height = "auto";
   title.style.display = "block";
   title.style.cursor = "pointer";
@@ -369,6 +446,22 @@ function createToolbar() {
 
   titleBar.appendChild(title);
 
+  // === Draggable handle bar ===
+  const dragHandleWrapper = document.createElement("div");
+  dragHandleWrapper.style.display = "flex";
+  dragHandleWrapper.style.justifyContent = "center";
+
+  const dragHandle = document.createElement("img");
+  dragHandle.src = chrome.runtime.getURL("gripper.svg");
+  dragHandle.alt = "Gripper";
+  dragHandle.style.width = "25px";
+  dragHandle.style.cursor = "move";
+  dragHandle.draggable = false;
+
+  dragHandleWrapper.appendChild(dragHandle);
+
+  titleBar.appendChild(dragHandleWrapper);
+
   // === Edit button ===
   const editButton = document.createElement("button");
   editButton.id = "starbar-edit-button";
@@ -376,8 +469,8 @@ function createToolbar() {
   editButton.style.border = "none";
   editButton.style.background = "transparent";
   editButton.style.cursor = "pointer";
-  editButton.style.fontSize = "16px";
-  editButton.style.marginLeft = "8px";
+  editButton.style.fontSize = "18px";
+  editButton.style.marginLeft = "1px";
   editButton.style.display = "none";
 
   editButton.onclick = () => {
@@ -401,8 +494,9 @@ function createToolbar() {
   bar.appendChild(content);
   document.body.appendChild(bar);
 
-  // === Make only the handle draggable ===
-  makeDraggable(bar, title);
+  // === Make only the star and gripper draggable ===
+  makeDraggable(title, bar); // star icon
+  makeDraggable(dragHandle, bar); // gripper icon
 
   // === Collapse/expand functionality ===
   let dragStartX = 0,
@@ -447,36 +541,89 @@ function createToolbar() {
   updateQuickbar();
 }
 
-function makeDraggable(el) {
+// Function that allows certain components to be draggable
+function makeDraggable(handle, target) {
   let isDragging = false;
   let offsetX, offsetY;
 
-  el.addEventListener("mousedown", (e) => {
+  handle.addEventListener("mousedown", (e) => {
     e.preventDefault();
     isDragging = true;
-    offsetX = e.clientX - el.getBoundingClientRect().left;
-    offsetY = e.clientY - el.getBoundingClientRect().top;
-    el.style.userSelect = "none";
+    offsetX = e.clientX - target.getBoundingClientRect().left;
+    offsetY = e.clientY - target.getBoundingClientRect().top;
+    target.style.userSelect = "none";
   });
 
   document.addEventListener("mousemove", (e) => {
     if (isDragging) {
-      el.style.left = e.clientX - offsetX + "px";
-      el.style.top = e.clientY - offsetY + "px";
-      el.style.right = "auto"; // Reset right when dragging
+      target.style.left = e.clientX - offsetX + "px";
+      target.style.top = e.clientY - offsetY + "px";
+      target.style.right = "auto"; // Reset right when dragging
     }
   });
 
   document.addEventListener("mouseup", () => {
     isDragging = false;
-    el.style.userSelect = "auto";
+    target.style.userSelect = "auto";
   });
+}
+
+function preloadAllMenus() {
+  const topMenus = document.querySelectorAll(
+    'div[role="menubar"] [role="menuitem"]'
+  );
+
+  let index = 0;
+
+  function openMenu(menuBtn, callback) {
+    simulateClick(menuBtn); // open it
+    setTimeout(() => {
+      const submenus = document.querySelectorAll('[role="menu"]');
+
+      // preload each submenu by clicking its items that have children
+      const submenuItems = Array.from(
+        submenus[submenus.length - 1]?.querySelectorAll(
+          '[role="menuitem"][aria-haspopup="true"]'
+        ) || []
+      );
+
+      let subIndex = 0;
+      function openSubmenu() {
+        if (subIndex >= submenuItems.length) {
+          simulateClick(menuBtn); // close parent
+          callback();
+          return;
+        }
+        const item = submenuItems[subIndex];
+        simulateClick(item); // open inner submenu
+        setTimeout(() => {
+          simulateClick(item); // close it
+          subIndex++;
+          openSubmenu();
+        }, 200);
+      }
+
+      openSubmenu();
+    }, 200);
+  }
+
+  function nextTopMenu() {
+    if (index >= topMenus.length) return;
+    const btn = topMenus[index];
+    openMenu(btn, () => {
+      index++;
+      setTimeout(nextTopMenu, 200);
+    });
+  }
+
+  nextTopMenu();
 }
 
 window.addEventListener("load", () => {
   createToolbar();
   observeMenus();
   checkAndRunOnboarding();
+  // preloadAllMenus();
 });
 
 window.addEventListener("contextmenu", (e) => {
@@ -504,9 +651,9 @@ window.addEventListener("contextmenu", (e) => {
     '[aria-label*="Fill color"], [aria-label*="Text color"]'
   );
   if (parent?.getAttribute("aria-label")?.includes("Fill"))
-    prefix = "Fill color";
-  if (parent?.getAttribute("aria-label")?.includes("Text"))
     prefix = "Text color";
+  if (parent?.getAttribute("aria-label")?.includes("Text"))
+    prefix = "Fill color";
 
   const path = `${prefix} > ${label}`;
 
