@@ -4,11 +4,11 @@ let editingMode = false;
 let titleCollapsed = false;
 
 function checkAndRunOnboarding() {
-  chrome.storage.local.get(['hasSeenOnboarding'], (result) => {
+  chrome.storage.local.get(["hasSeenOnboarding"], (result) => {
     if (!result.hasSeenOnboarding) {
       // Wait a bit for the page to fully load, then start the tour
       setTimeout(() => {
-        if (typeof runOnboardingTour === 'function') {
+        if (typeof runOnboardingTour === "function") {
           runOnboardingTour();
         }
       }, 2000);
@@ -166,115 +166,116 @@ function updateQuickbar() {
         funcList[funcList.length - 1].trim().slice(1);
       btn.innerText = btnText;
       // For the onboarding tour, give the 'Import' button a specific, stable ID.
-      if (func.toLowerCase() === 'file > import') {
-        wrapper.id = 'tour-import-button-wrapper'; 
+      if (func.toLowerCase() === "file > import") {
+        wrapper.id = "tour-import-button-wrapper";
 
-      let iconSrc = null;
+        let iconSrc = null;
 
-      if (func.includes("Fill color")) {
-        iconSrc = chrome.runtime.getURL("fill.svg");
-      } else if (func.includes("Text color")) {
-        iconSrc = chrome.runtime.getURL("A.svg");
-      }
+        if (func.includes("Fill color")) {
+          iconSrc = chrome.runtime.getURL("fill.svg");
+        } else if (func.includes("Text color")) {
+          iconSrc = chrome.runtime.getURL("A.svg");
+        }
 
-      if (iconSrc) {
-        const iconImg = document.createElement("img");
-        iconImg.src = iconSrc;
-        iconImg.alt = "";
-        iconImg.style.width = "16px";
-        iconImg.style.height = "16px";
-        iconImg.style.marginRight = "6px";
-        iconImg.style.verticalAlign = "middle";
+        if (iconSrc) {
+          const iconImg = document.createElement("img");
+          iconImg.src = iconSrc;
+          iconImg.alt = "";
+          iconImg.style.width = "16px";
+          iconImg.style.height = "16px";
+          iconImg.style.marginRight = "6px";
+          iconImg.style.verticalAlign = "middle";
 
-        // Wrap text so icon and label align nicely
-        const textWrapper = document.createElement("span");
-        textWrapper.innerText = btnText;
+          // Wrap text so icon and label align nicely
+          const textWrapper = document.createElement("span");
+          textWrapper.innerText = btnText;
 
-        btn.innerText = "";
-        btn.style.display = "flex";
-        btn.style.alignItems = "center";
-        btn.style.justifyContent = "flex-start";
+          btn.innerText = "";
+          btn.style.display = "flex";
+          btn.style.alignItems = "center";
+          btn.style.justifyContent = "flex-start";
 
-        iconImg.style.width = "16px";
-        iconImg.style.height = "16px";
-        iconImg.style.marginRight = "6px";
-        iconImg.style.flexShrink = "0";
+          iconImg.style.width = "16px";
+          iconImg.style.height = "16px";
+          iconImg.style.marginRight = "6px";
+          iconImg.style.flexShrink = "0";
 
-        textWrapper.style.flexGrow = "1";
-        textWrapper.style.textAlign = "center";
+          textWrapper.style.flexGrow = "1";
+          textWrapper.style.textAlign = "center";
 
-        btn.appendChild(iconImg);
-        btn.appendChild(textWrapper);
-      } else {
-        btn.innerText = btnText; // fallback for non-color buttons
-      }
-      Object.assign(btn.style, {
-        background: "#ffffff",
-        color: "#454444",
-        border: "0px solid #e0e0e0",
-        borderRadius: "40px",
-        padding: "6px 1px",
-        cursor: editingMode ? "default" : "pointer",
-        flexGrow: 1,
-        width: "100%",
-        textAlign: "center",
-        transition: "background-color 0.2s ease",
-        fontFamily:
-          "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-      });
-
-      // Add hover effects
-      if (!editingMode) {
-        btn.onclick = () => triggerMenuPath(func);
-        btn.addEventListener("mouseenter", () => {
-          btn.style.backgroundColor = "#D9D9D9";
+          btn.appendChild(iconImg);
+          btn.appendChild(textWrapper);
+        } else {
+          btn.innerText = btnText; // fallback for non-color buttons
+        }
+        Object.assign(btn.style, {
+          background: "#ffffff",
+          color: "#454444",
+          border: "0px solid #e0e0e0",
+          borderRadius: "40px",
+          padding: "6px 1px",
+          cursor: editingMode ? "default" : "pointer",
+          flexGrow: 1,
+          width: "100%",
+          textAlign: "center",
+          transition: "background-color 0.2s ease",
+          fontFamily:
+            "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
         });
-        btn.addEventListener("mouseleave", () => {
-          btn.style.backgroundColor = "#ffffff";
-        });
-      }
 
-      if (editingMode) {
-        const drag = document.createElement("span");
-        drag.textContent = "⋮⋮";
-        drag.style.cssText = "cursor: grab; padding: 0 6px; font-size: 16px;";
-
-        const del = document.createElement("button");
-        del.innerText = "✕";
-        del.style.cssText =
-          "margin-left: 6px; background: #fff; color: black; border: 1px solid #ccc; cursor: pointer;";
-        del.onclick = () => {
-          buttons.splice(index, 1);
-          chrome.storage.local.set({ pinnedFunctions: buttons }, () => {
-            updateQuickbar();
-            // Update stars in open menus
-            const stars = document.querySelectorAll(".pin-star");
-            stars.forEach((star) => {
-              const item = star.closest('[role="menuitem"]');
-              const path = getFullMenuPath(item);
-              let flag = false;
-              for (let i = 0; i < buttons.length; i++) {
-                if (buttons[i].includes(path)) {
-                  star.textContent = "⭐";
-                  flag = true;
-                  break;
-                }
-              }
-              if (!flag) {
-                star.textContent = "☆";
-              }
-            });
+        // Add hover effects
+        if (!editingMode) {
+          btn.onclick = () => triggerMenuPath(func);
+          btn.addEventListener("mouseenter", () => {
+            btn.style.backgroundColor = "#D9D9D9";
           });
-        };
+          btn.addEventListener("mouseleave", () => {
+            btn.style.backgroundColor = "#ffffff";
+          });
+        }
 
-        wrapper.appendChild(drag);
-        wrapper.appendChild(btn);
-        wrapper.appendChild(del);
-      } else {
-        wrapper.appendChild(btn);
+        if (editingMode) {
+          const drag = document.createElement("span");
+          drag.textContent = "⋮⋮";
+          drag.style.cssText = "cursor: grab; padding: 0 6px; font-size: 16px;";
+
+          const del = document.createElement("button");
+          del.innerText = "✕";
+          del.style.cssText =
+            "margin-left: 6px; background: #fff; color: black; border: 1px solid #ccc; cursor: pointer;";
+          del.onclick = () => {
+            buttons.splice(index, 1);
+            chrome.storage.local.set({ pinnedFunctions: buttons }, () => {
+              updateQuickbar();
+              // Update stars in open menus
+              const stars = document.querySelectorAll(".pin-star");
+              stars.forEach((star) => {
+                const item = star.closest('[role="menuitem"]');
+                const path = getFullMenuPath(item);
+                let flag = false;
+                for (let i = 0; i < buttons.length; i++) {
+                  if (buttons[i].includes(path)) {
+                    star.textContent = "⭐";
+                    flag = true;
+                    break;
+                  }
+                }
+                if (!flag) {
+                  star.textContent = "☆";
+                }
+              });
+            });
+          };
+
+          wrapper.appendChild(drag);
+          wrapper.appendChild(btn);
+          wrapper.appendChild(del);
+        } else {
+          wrapper.appendChild(btn);
+        }
+
+        container.appendChild(wrapper);
       }
-
-      container.appendChild(wrapper);
     });
 
     // Hide/show editContainer and editButton based on whether there are items
