@@ -109,6 +109,15 @@ function triggerMenuPath(path) {
     setTimeout(() => {
       simulateClick(btn);
     }, 100);
+    setTimeout(() => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Escape",
+          code: "Escape",
+          keyCode: 27,
+        })
+      );
+    }, 2000);
   }
 }
 
