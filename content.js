@@ -64,48 +64,168 @@ function triggerMenuPath(path) {
     return;
   }
 
-  function openMenu(menuBtn) {
-    simulateClick(menuBtn); // open it
+ 
+  function navigateMenuPath(labelPath, currentIndex = 0) {
+    if (currentIndex >= labelPath.length) {
+      
+      console.log("Navigation complete - final item should have been clicked");
+     
+      setTimeout(() => {
+        document.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "Escape",
+            code: "Escape",
+            keyCode: 27,
+          })
+        );
+      }, 200);
+      return;
+    }
+
+    const currentLabel = cleanText(labelPath[currentIndex]);
+    const isLastItem = currentIndex === labelPath.length - 1;
+    console.log(`Looking for menu item: "${currentLabel}" at index ${currentIndex}, isLast: ${isLastItem}`);
+    
+   
     setTimeout(() => {
-      const submenus = document.querySelectorAll('[role="menu"]');
+      // Find the menu item for the current level - only look at visible items
+      let menuItem = Array.from(
+        document.querySelectorAll('[role="menuitem"]')
+      ).filter(el => el.offsetParent !== null) // Only visible items
+       .find((el) => cleanText(el.textContent) === currentLabel);
 
-      // preload each submenu by clicking its items that have children
-      const submenuItems = Array.from(
-        submenus[submenus.length - 1]?.querySelectorAll(
-          '[role="menuitem"][aria-haspopup="true"]'
-        ) || []
-      );
-
-      let subIndex = 0;
-      function openSubmenu() {
-        if (subIndex >= submenuItems.length) {
-          simulateClick(menuBtn); // close parent
-          return;
-        }
-        const item = submenuItems[subIndex];
-        simulateClick(item); // open inner submenu
-        setTimeout(() => {
-          simulateClick(item); // close it
-          subIndex++;
-          openSubmenu();
-        }, 200);
+      // If exact match fails, try partial matching
+      if (!menuItem) {
+        menuItem = Array.from(
+          document.querySelectorAll('[role="menuitem"]')
+        ).filter(el => el.offsetParent !== null)
+         .find((el) => {
+          const elText = cleanText(el.textContent);
+          const elInnerText = cleanText(el.innerText);
+          // Try both directions: does the label contain the element text, or vice versa
+          return elText.includes(currentLabel) || currentLabel.includes(elText) ||
+                 elInnerText.includes(currentLabel) || currentLabel.includes(elInnerText);
+        });
       }
 
-      openSubmenu();
+      if (!menuItem) {
+        console.warn(`Could not find menu item: "${labelPath[currentIndex]}"`, {
+          searchedFor: currentLabel,
+          currentIndex: currentIndex,
+          fullPath: labelPath,
+          availableItems: Array.from(document.querySelectorAll('[role="menuitem"]'))
+            .filter(el => el.offsetParent !== null) // Only visible items
+            .map(el => ({
+              text: cleanText(el.textContent),
+              innerText: cleanText(el.innerText),
+              content: cleanText(el.querySelector('.goog-menuitem-content')?.textContent || '')
+            }))
+        });
+        alert(`Could not find menu item: "${labelPath[currentIndex]}"\n\nTry starring the item again to ensure the path is correct.`);
+        return;
+      }
+
+      console.log(`Found menu item: "${cleanText(menuItem.textContent)}" for "${currentLabel}"`);
+
+      // Click the menu item
+      simulateClick(menuItem);
+      
+      if (isLastItem) {
+        
+        console.log("Clicked final item, navigation complete");
+        setTimeout(() => {
+          document.dispatchEvent(
+            new KeyboardEvent("keydown", {
+              key: "Escape",
+              code: "Escape",
+              keyCode: 27,
+            })
+          );
+        }, 500);
+      } else {
+       
+        setTimeout(() => {
+          navigateMenuPath(labelPath, currentIndex + 1);
+        }, 250);
+      }
+    }, 100);
+  }
+
+  
+  function openSpecificMenuPath(labelPath) {
+    console.log("Trying alternative approach for path:", labelPath);
+    
+   
+    const topMenuLabel = cleanText(labelPath[0]);
+    const topMenu = Array.from(
+      document.querySelectorAll('div[role="menubar"] [role="menuitem"]')
+    ).find(el => cleanText(el.textContent) === topMenuLabel);
+    
+    if (!topMenu) {
+      alert(`Could not find top menu: ${labelPath[0]}`);
+      return;
+    }
+    
+    simulateClick(topMenu);
+    
+    
+    setTimeout(() => {
+      navigateFromOpen(labelPath.slice(1), 0);
     }, 200);
+  }
+  
+  function navigateFromOpen(remainingPath, depth) {
+    if (remainingPath.length === 0) {
+      return;
+    }
+    
+    const targetLabel = cleanText(remainingPath[0]);
+    const isLast = remainingPath.length === 1;
+    
+    setTimeout(() => {
+      const allMenus = document.querySelectorAll('[role="menu"]');
+      const currentMenu = allMenus[allMenus.length - 1]; // Get the most recently opened menu
+      
+      if (!currentMenu) {
+        console.error("No menu found at depth", depth);
+        return;
+      }
+      
+      const menuItem = Array.from(currentMenu.querySelectorAll('[role="menuitem"]'))
+        .find(el => {
+          const elText = cleanText(el.textContent);
+          const elInner = cleanText(el.innerText);
+          return elText === targetLabel || elInner === targetLabel || 
+                 elText.includes(targetLabel) || targetLabel.includes(elText);
+        });
+      
+      if (!menuItem) {
+        console.error(`Could not find "${targetLabel}" in current menu`);
+        return;
+      }
+      
+      simulateClick(menuItem);
+      
+      if (!isLast) {
+        // Continue to next level
+        navigateFromOpen(remainingPath.slice(1), depth + 1);
+      } else {
+        // Final item clicked, close menus
+        setTimeout(() => {
+          document.dispatchEvent(
+            new KeyboardEvent("keydown", {
+              key: "Escape", code: "Escape", keyCode: 27
+            })
+          );
+        }, 300);
+      }
+    }, 150 + (depth * 50)); // Increase delay for deeper levels
   }
 
   var btn = document.getElementById(path);
 
-  // Else case
-  if (!btn) {
-    var btnMenu = Array.from(
-      document.querySelectorAll('[role="menuitem"]')
-    ).find((el) => cleanText(el.textContent) === cleanText(labels[0]));
-
-    openMenu(btnMenu);
-    setTimeout(() => triggerMenuPath(path), 100);
-  } else {
+  // If button exists in DOM, click it directly
+  if (btn) {
     setTimeout(() => {
       simulateClick(btn);
     }, 100);
@@ -117,6 +237,19 @@ function triggerMenuPath(path) {
           keyCode: 27,
         })
       );
+    }, 2000);
+  } else {
+    // Button not in DOM yet, try the specific path navigation first
+    console.log("Attempting navigation for path:", labels);
+    navigateMenuPath(labels);
+    
+    // If that fails, fallback to alternative approach after a delay
+    setTimeout(() => {
+      const stillExists = document.getElementById(path);
+      if (!stillExists) {
+        console.log("First approach failed, trying alternative...");
+        openSpecificMenuPath(labels);
+      }
     }, 2000);
   }
 }
@@ -307,17 +440,41 @@ function enableDragDrop(container, data) {
 
 // Helper function that gets the full menu path of a div component
 function getFullMenuPath(item) {
-  let label = cleanText(
-    item.querySelector(".goog-menuitem-content")?.textContent ||
-      item.textContent
-  );
+ 
+  let label = "";
+  
+  
+  const contentEl = item.querySelector(".goog-menuitem-content");
+  if (contentEl) {
+    label = cleanText(contentEl.innerText || contentEl.textContent);
+  }
+  
+ 
+  if (!label) {
+    label = cleanText(item.innerText || item.textContent);
+  }
+  
+  
+  if (!label) {
+    label = cleanText(item.getAttribute("aria-label"));
+  }
+  
   let path = [label];
   let current = item.closest('[role="menu"]');
 
   while (current) {
     const opener = document.querySelector(`[aria-controls="${current.id}"]`);
     if (!opener) break;
-    const openerLabel = cleanText(opener.textContent);
+    
+    
+    let openerLabel = "";
+    const openerContent = opener.querySelector(".goog-menuitem-content");
+    if (openerContent) {
+      openerLabel = cleanText(openerContent.innerText || openerContent.textContent);
+    } else {
+      openerLabel = cleanText(opener.innerText || opener.textContent);
+    }
+    
     path.unshift(openerLabel);
     current = opener.closest('[role="menu"]');
   }
@@ -326,7 +483,7 @@ function getFullMenuPath(item) {
     'div[role="menubar"] [aria-expanded="true"]'
   );
   if (topMenu) {
-    const topLabel = cleanText(topMenu.textContent);
+    const topLabel = cleanText(topMenu.innerText || topMenu.textContent);
     if (path[0] !== topLabel) {
       path.unshift(topLabel);
     }
