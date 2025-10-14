@@ -2,15 +2,115 @@
 let lastTopMenu = null;
 let editingMode = false;
 let titleCollapsed = false;
+let currentMenuPath = []; 
+
+
+function isExtensionContextValid() {
+  try {
+    return chrome && chrome.runtime && chrome.runtime.id;
+  } catch (error) {
+    return false;
+  }
+}
+
+
+function safeStorageGet(key, callback) {
+  if (!isExtensionContextValid()) {
+    console.warn('Extension context invalidated - using fallback');
+    callback({ [key]: [] });
+    return;
+  }
+  
+  try {
+    chrome.storage.local.get(key, callback);
+  } catch (error) {
+    console.warn('Storage get failed:', error);
+    callback({ [key]: [] });
+  }
+}
+
+function safeStorageSet(data, callback) {
+  if (!isExtensionContextValid()) {
+    console.warn('Extension context invalidated - cannot save data');
+    if (callback) callback();
+    return;
+  }
+  
+  try {
+    chrome.storage.local.set(data, callback);
+  } catch (error) {
+    console.warn('Storage set failed:', error);
+    if (callback) callback();
+  }
+}
+
+
+function safeGetURL(path) {
+  if (!isExtensionContextValid()) {
+    console.warn('Extension context invalidated - using fallback URL');
+    return `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"></svg>`;
+  }
+  
+  try {
+    return chrome.runtime.getURL(path);
+  } catch (error) {
+    console.warn('getURL failed:', error);
+    return `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"></svg>`;
+  }
+}
 
 // Helper function that simulates click action
 function simulateClick(el) {
+ 
+  if (el.focus) {
+    el.focus();
+  }
+  
+  
+  const rect = el.getBoundingClientRect();
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  
+  const mouseEvents = [
+    new MouseEvent("mousedown", { 
+      bubbles: true, 
+      cancelable: true,
+      clientX: centerX,
+      clientY: centerY,
+      button: 0
+    }),
+    new MouseEvent("mouseup", { 
+      bubbles: true, 
+      cancelable: true,
+      clientX: centerX,
+      clientY: centerY,
+      button: 0
+    }),
+    new MouseEvent("click", { 
+      bubbles: true, 
+      cancelable: true,
+      clientX: centerX,
+      clientY: centerY,
+      button: 0
+    })
+  ];
+  
+  mouseEvents.forEach(event => el.dispatchEvent(event));
+}
+
+// Enhanced click function for submenu items
+function simulateSubmenuClick(el) {
+  // For submenu items, we might need hover events to trigger the submenu
+  el.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
+  el.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+  
+  // Click immediately after hover events
   el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
   el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
   el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 }
 
-// Helper function that parses through stars
+
 function cleanText(text) {
   return (
     text
@@ -60,175 +160,48 @@ function triggerMenuPath(path) {
       }
     };
 
-    tryClickColor();
+    setTimeout(tryClickColor, 300);
     return;
   }
 
- 
-  function navigateMenuPath(labelPath, currentIndex = 0) {
-    if (currentIndex >= labelPath.length) {
-      
-      console.log("Navigation complete - final item should have been clicked");
-     
-      setTimeout(() => {
-        document.dispatchEvent(
-          new KeyboardEvent("keydown", {
-            key: "Escape",
-            code: "Escape",
-            keyCode: 27,
-          })
-        );
-      }, 200);
-      return;
-    }
+  
+  console.log("Navigating menu path:", labels);
+  navigateMenuPathImproved(labels);
+}
 
-    const currentLabel = cleanText(labelPath[currentIndex]);
-    const isLastItem = currentIndex === labelPath.length - 1;
-    console.log(`Looking for menu item: "${currentLabel}" at index ${currentIndex}, isLast: ${isLastItem}`);
-    
-   
-    setTimeout(() => {
-      // Find the menu item for the current level - only look at visible items
-      let menuItem = Array.from(
-        document.querySelectorAll('[role="menuitem"]')
-      ).filter(el => el.offsetParent !== null) // Only visible items
-       .find((el) => cleanText(el.textContent) === currentLabel);
 
-      // If exact match fails, try partial matching
-      if (!menuItem) {
-        menuItem = Array.from(
-          document.querySelectorAll('[role="menuitem"]')
-        ).filter(el => el.offsetParent !== null)
-         .find((el) => {
-          const elText = cleanText(el.textContent);
-          const elInnerText = cleanText(el.innerText);
-          // Try both directions: does the label contain the element text, or vice versa
-          return elText.includes(currentLabel) || currentLabel.includes(elText) ||
-                 elInnerText.includes(currentLabel) || currentLabel.includes(elInnerText);
-        });
-      }
-
-      if (!menuItem) {
-        console.warn(`Could not find menu item: "${labelPath[currentIndex]}"`, {
-          searchedFor: currentLabel,
-          currentIndex: currentIndex,
-          fullPath: labelPath,
-          availableItems: Array.from(document.querySelectorAll('[role="menuitem"]'))
-            .filter(el => el.offsetParent !== null) // Only visible items
-            .map(el => ({
-              text: cleanText(el.textContent),
-              innerText: cleanText(el.innerText),
-              content: cleanText(el.querySelector('.goog-menuitem-content')?.textContent || '')
-            }))
-        });
-        alert(`Could not find menu item: "${labelPath[currentIndex]}"\n\nTry starring the item again to ensure the path is correct.`);
-        return;
-      }
-
-      console.log(`Found menu item: "${cleanText(menuItem.textContent)}" for "${currentLabel}"`);
-
-      // Click the menu item
-      simulateClick(menuItem);
-      
-      if (isLastItem) {
-        
-        console.log("Clicked final item, navigation complete");
-        setTimeout(() => {
-          document.dispatchEvent(
-            new KeyboardEvent("keydown", {
-              key: "Escape",
-              code: "Escape",
-              keyCode: 27,
-            })
-          );
-        }, 500);
-      } else {
-       
-        setTimeout(() => {
-          navigateMenuPath(labelPath, currentIndex + 1);
-        }, 250);
-      }
-    }, 100);
+function navigateMenuPathImproved(labelPath) {
+  if (labelPath.length === 0) {
+    console.warn("Empty label path provided");
+    return;
   }
 
+  console.log("Full navigation path:", labelPath);
+  console.log("Path length:", labelPath.length);
+
+  const topMenuLabel = cleanText(labelPath[0]);
   
-  function openSpecificMenuPath(labelPath) {
-    console.log("Trying alternative approach for path:", labelPath);
-    
-   
-    const topMenuLabel = cleanText(labelPath[0]);
-    const topMenu = Array.from(
-      document.querySelectorAll('div[role="menubar"] [role="menuitem"]')
-    ).find(el => cleanText(el.textContent) === topMenuLabel);
-    
-    if (!topMenu) {
-      alert(`Could not find top menu: ${labelPath[0]}`);
-      return;
-    }
-    
-    simulateClick(topMenu);
-    
-    
-    setTimeout(() => {
-      navigateFromOpen(labelPath.slice(1), 0);
-    }, 200);
+  // Step 1: Find and click the top-level menu
+  const topMenu = Array.from(
+    document.querySelectorAll('div[role="menubar"] [role="menuitem"]')
+  ).find(el => cleanText(el.textContent) === topMenuLabel);
+  
+  if (!topMenu) {
+    alert(`Could not find top menu: "${labelPath[0]}"`);
+    return;
   }
   
-  function navigateFromOpen(remainingPath, depth) {
-    if (remainingPath.length === 0) {
-      return;
-    }
-    
-    const targetLabel = cleanText(remainingPath[0]);
-    const isLast = remainingPath.length === 1;
-    
+  console.log(`Found top menu: "${topMenuLabel}", will navigate ${labelPath.length - 1} more levels`);
+  simulateClick(topMenu);
+  
+  // Step 2: Navigate through the rest of the path
+  if (labelPath.length > 1) {
     setTimeout(() => {
-      const allMenus = document.querySelectorAll('[role="menu"]');
-      const currentMenu = allMenus[allMenus.length - 1]; // Get the most recently opened menu
-      
-      if (!currentMenu) {
-        console.error("No menu found at depth", depth);
-        return;
-      }
-      
-      const menuItem = Array.from(currentMenu.querySelectorAll('[role="menuitem"]'))
-        .find(el => {
-          const elText = cleanText(el.textContent);
-          const elInner = cleanText(el.innerText);
-          return elText === targetLabel || elInner === targetLabel || 
-                 elText.includes(targetLabel) || targetLabel.includes(elText);
-        });
-      
-      if (!menuItem) {
-        console.error(`Could not find "${targetLabel}" in current menu`);
-        return;
-      }
-      
-      simulateClick(menuItem);
-      
-      if (!isLast) {
-        // Continue to next level
-        navigateFromOpen(remainingPath.slice(1), depth + 1);
-      } else {
-        // Final item clicked, close menus
-        setTimeout(() => {
-          document.dispatchEvent(
-            new KeyboardEvent("keydown", {
-              key: "Escape", code: "Escape", keyCode: 27
-            })
-          );
-        }, 300);
-      }
-    }, 150 + (depth * 50)); // Increase delay for deeper levels
-  }
-
-  var btn = document.getElementById(path);
-
-  // If button exists in DOM, click it directly
-  if (btn) {
-    setTimeout(() => {
-      simulateClick(btn);
-    }, 100);
+      console.log("Starting submenu navigation with:", labelPath.slice(1));
+      navigateSubmenuPath(labelPath.slice(1), 0);
+    }, 250);
+  } else {
+    // Just opening the top menu, close after a moment
     setTimeout(() => {
       document.dispatchEvent(
         new KeyboardEvent("keydown", {
@@ -237,37 +210,370 @@ function triggerMenuPath(path) {
           keyCode: 27,
         })
       );
-    }, 2000);
-  } else {
-    // Button not in DOM yet, try the specific path navigation first
-    console.log("Attempting navigation for path:", labels);
-    navigateMenuPath(labels);
-    
-    // If that fails, fallback to alternative approach after a delay
-    setTimeout(() => {
-      const stillExists = document.getElementById(path);
-      if (!stillExists) {
-        console.log("First approach failed, trying alternative...");
-        openSpecificMenuPath(labels);
-      }
-    }, 2000);
+    }, 300);
   }
+}
+
+
+function navigateSubmenuPath(remainingPath, depth, retryCount = 0) {
+  if (remainingPath.length === 0) {
+    console.log("Navigation complete - no more items in path");
+    return;
+  }
+  
+  const targetLabel = cleanText(remainingPath[0]);
+  const isLastItem = remainingPath.length === 1;
+  
+  console.log(`[Depth ${depth}] Looking for "${targetLabel}" (original: "${remainingPath[0]}"), isLast: ${isLastItem}, remaining after this: ${remainingPath.length - 1}, retry: ${retryCount}`);
+  
+  setTimeout(() => {
+  
+    const allMenus = Array.from(document.querySelectorAll('[role="menu"]')).filter(
+      menu => menu.offsetParent !== null
+    );
+    
+    console.log(`Found ${allMenus.length} visible menu(s)`);
+    
+  
+    allMenus.forEach((menu, index) => {
+      const rect = menu.getBoundingClientRect();
+      const items = Array.from(menu.querySelectorAll('[role="menuitem"]'))
+        .filter(el => el.offsetParent !== null)
+        .slice(0, 3) // Show first 3 items
+        .map(el => cleanText(el.textContent));
+      console.log(`Menu ${index}: pos(${Math.round(rect.left)}, ${Math.round(rect.top)}), items: [${items.join(', ')}...]`);
+    });
+    
+  
+    if (allMenus.length === 0) {
+      if (retryCount < 3) {
+        console.warn(`No visible menus found at depth ${depth}, retrying in 300ms... (attempt ${retryCount + 1}/3)`);
+        setTimeout(() => {
+          navigateSubmenuPath(remainingPath, depth, retryCount + 1); // Retry same step
+        }, 300);
+        return;
+      } else {
+        console.error("No visible menus found after multiple retries");
+        alert(`Could not find submenu for: "${remainingPath[0]}". The submenu may not have opened properly.`);
+        return;
+      }
+    }
+    
+
+    const sortedMenus = allMenus.sort((a, b) => {
+      const aRect = a.getBoundingClientRect();
+      const bRect = b.getBoundingClientRect();
+      
+    
+      if (Math.abs(aRect.left - bRect.left) > 10) {
+        return bRect.left - aRect.left; // rightmost first
+      }
+      
+     
+      const aZIndex = parseInt(window.getComputedStyle(a).zIndex) || 0;
+      const bZIndex = parseInt(window.getComputedStyle(b).zIndex) || 0;
+      return bZIndex - aZIndex;
+    });
+    
+    
+    const currentMenu = sortedMenus[0];
+    
+    console.log(`Looking in menu at position (${currentMenu.getBoundingClientRect().left}, ${currentMenu.getBoundingClientRect().top})`);
+    
+    
+    if (depth > 0 && allMenus.length > 1) {
+      const mainMenuRect = sortedMenus[sortedMenus.length - 1].getBoundingClientRect();
+      const currentMenuRect = currentMenu.getBoundingClientRect();
+      
+      // Submenu should be to the right of main menu
+      if (currentMenuRect.left <= mainMenuRect.left) {
+        console.warn("Warning: Expected submenu but menu position doesn't look right");
+      }
+    }
+    
+    
+    const allItems = Array.from(currentMenu.querySelectorAll('[role="menuitem"]'))
+      .filter(el => el.offsetParent !== null)
+      .map(el => {
+        const contentEl = el.querySelector(".goog-menuitem-content");
+        const rawText = contentEl ? contentEl.textContent : el.textContent;
+        const cleaned = cleanText(rawText);
+        const hasSubmenu = el.getAttribute("aria-haspopup") === "true";
+        return { el, rawText, cleaned, hasSubmenu };
+      });
+    
+    console.log("Available menu items:", allItems.map(item => `"${item.cleaned}" (raw: "${item.rawText}") ${item.hasSubmenu ? '[HAS SUBMENU]' : ''}`));
+    
+    // Find the menu item - try multiple matching strategies
+    let menuItem = null;
+    let foundItem = null;
+    
+    // Strategy 1: Exact match (ignoring arrows)
+    const targetLabelClean = targetLabel.replace(/►/g, '').trim();
+    foundItem = allItems.find(item => {
+      const itemClean = item.cleaned.replace(/►/g, '').trim();
+      return itemClean === targetLabelClean;
+    });
+    if (foundItem) menuItem = foundItem.el;
+    
+    
+    if (!menuItem) {
+      const normalizeSpaces = (text) => {
+        return text
+          .replace(/\s*\(\s*/g, ' (')  
+          .replace(/\s*\)\s*/g, ') ')  
+          .replace(/\s+/g, ' ')       
+          .trim();
+      };
+      
+      const targetNormalized = normalizeSpaces(targetLabelClean);
+      foundItem = allItems.find(item => {
+        const itemClean = item.cleaned.replace(/►/g, '').trim();
+        const itemNormalized = normalizeSpaces(itemClean);
+        return itemNormalized === targetNormalized;
+      });
+      if (foundItem) menuItem = foundItem.el;
+    }
+    
+   
+    if (!menuItem) {
+      foundItem = allItems.find(item => {
+        const itemClean = item.cleaned.replace(/►/g, '').trim();
+        return itemClean === targetLabelClean || 
+               (item.hasSubmenu && targetLabelClean.startsWith(itemClean));
+      });
+      if (foundItem) menuItem = foundItem.el;
+    }
+    
+    
+    if (!menuItem) {
+      const removePunctuation = (text) => text.replace(/[^\w]/g, '').toLowerCase();
+      const targetFuzzy = removePunctuation(targetLabelClean);
+      
+      foundItem = allItems.find(item => {
+        const itemClean = item.cleaned.replace(/►/g, '').trim();
+        const itemFuzzy = removePunctuation(itemClean);
+        return itemFuzzy === targetFuzzy;
+      });
+      if (foundItem) menuItem = foundItem.el;
+    }
+    
+    // Strategy 5: Partial matching both ways
+    if (!menuItem) {
+      foundItem = allItems.find(item => {
+        const itemClean = item.cleaned.replace(/►/g, '').trim();
+        return itemClean.includes(targetLabelClean) || targetLabelClean.includes(itemClean);
+      });
+      if (foundItem) menuItem = foundItem.el;
+    }
+    
+    
+    if (!menuItem) {
+      const targetWords = targetLabelClean.split(/\s+/).filter(w => w.length > 2);
+      foundItem = allItems.find(item => {
+        const itemClean = item.cleaned.replace(/►/g, '').trim();
+        const itemWords = itemClean.split(/\s+/).filter(w => w.length > 2);
+        return targetWords.length > 0 && 
+               targetWords.every(word => itemWords.some(iw => iw.includes(word) || word.includes(iw)));
+      });
+      if (foundItem) menuItem = foundItem.el;
+    }
+    
+    // Strategy 7: Special cases for common Google Sheets items
+    if (!menuItem) {
+      const specialCases = {
+        'share with others': ['share', 'others', 'people', 'collaborate'],
+        'email': ['email', 'send', 'mail'],
+        'publish to web': ['publish', 'web', 'public'],
+        'download': ['download', 'export'],
+        'make a copy': ['copy', 'duplicate'],
+        'import': ['import', 'upload']
+      };
+      
+      const targetKey = Object.keys(specialCases).find(key => 
+        targetLabelClean.includes(key) || key.includes(targetLabelClean)
+      );
+      
+      if (targetKey) {
+        const keywords = specialCases[targetKey];
+        foundItem = allItems.find(item => {
+          const itemClean = item.cleaned.replace(/►/g, '').trim();
+          return keywords.some(keyword => itemClean.includes(keyword));
+        });
+        if (foundItem) {
+          console.log(`Special case match: "${targetLabelClean}" matched "${foundItem.cleaned}" using keywords: ${keywords.join(', ')}`);
+          menuItem = foundItem.el;
+        }
+      }
+    }
+    
+    if (!menuItem) {
+      const availableItems = allItems.map(item => `"${item.cleaned}" (raw: "${item.rawText}")`);
+      
+      console.error(`Could not find "${remainingPath[0]}" at depth ${depth}`, {
+        searchedFor: targetLabel,
+        originalText: remainingPath[0],
+        availableItems: availableItems
+      });
+      
+      alert(`Could not find menu item: "${remainingPath[0]}"\n\nSearching for: "${targetLabel}"\n\nAvailable items in this submenu:\n${availableItems.join("\n")}\n\nTip: Try starring the item again from the actual submenu.`);
+      
+      // Close all menus
+      setTimeout(() => {
+        document.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "Escape",
+            code: "Escape",
+            keyCode: 27,
+          })
+        );
+      }, 100);
+      return;
+    }
+    
+    const itemHasSubmenu = foundItem?.hasSubmenu || false;
+    console.log(`Found menu item: "${cleanText(menuItem.textContent)}", hasSubmenu: ${itemHasSubmenu}, isLastInPath: ${isLastItem}`);
+    
+    // Click the menu item - use enhanced click for submenu items that need to open submenus
+    if (itemHasSubmenu && !isLastItem) {
+      console.log("Using enhanced submenu click (with hover) to open submenu");
+      simulateSubmenuClick(menuItem);
+    } else {
+      console.log("Using standard click for final action or non-submenu item");
+      simulateClick(menuItem);
+      
+      // For final items that aren't dialog actions, add a small delay to ensure click registers
+      if (isLastItem && !itemHasSubmenu) {
+        console.log("Final simple menu item clicked - ensuring click has time to register");
+      }
+    }
+    
+   
+    if (!isLastItem && itemHasSubmenu) {
+      console.log(`Item has submenu and more path remains, continuing to depth ${depth + 1}`);
+      setTimeout(() => {
+        navigateSubmenuPath(remainingPath.slice(1), depth + 1);
+      }, 600); // Reduced timeout - was too long for simple menu items
+    } else if (isLastItem) {
+      // This was the final item in path
+      console.log("Clicked final item in path");
+      
+      
+      const actionText = cleanText(remainingPath[0]);
+      const shouldKeepDialogOpen = [
+        'pdf (.pdf)', 'excel (.xlsx)', 'csv', 'tsv', 'ods', 'zip', 
+        'share with others', 'email', 'publish to web', 'make a copy',
+        'import', 'version history', 'details', 'rename'
+      ].some(action => actionText.includes(action));
+      
+      if (shouldKeepDialogOpen) {
+        console.log("Action opens dialog/popup - not closing menus immediately");
+        
+        // Check multiple times for dialog appearance with increasing delays
+        const checkForDialog = (attempt = 1, maxAttempts = 5) => {
+          setTimeout(() => {
+            // More comprehensive dialog selectors for Google Sheets
+            const dialogSelectors = [
+              '[role="dialog"]',
+              '.modal',
+              '[aria-modal="true"]',
+              '.docs-dialog',
+              '.docs-material-dialog',
+              '.goog-modal-dialog',
+              '.docs-share-dialog',
+              '.docs-download-dialog',
+              '[data-dialog]',
+              '.picker-dialog',
+              '.jfk-bubble',
+              '.docs-bubble',
+             
+              '.gb_g', 
+              '.picker',
+              '.docs-offscreen-focus-trap-start', 
+              '.docs-offscreen-focus-trap-end'
+            ];
+            
+            const hasDialog = dialogSelectors.some(selector => {
+              const elements = document.querySelectorAll(selector);
+              return Array.from(elements).some(el => {
+                const style = window.getComputedStyle(el);
+                return el.offsetParent !== null && 
+                       style.visibility !== 'hidden' && 
+                       style.display !== 'none' &&
+                       style.opacity !== '0';
+              });
+            });
+            
+           
+            const hasOverlay = document.querySelector('.docs-material-dialog-backdrop, .goog-modalpopup-bg, .modal-backdrop, [class*="overlay"], [class*="backdrop"]');
+            
+            console.log(`Dialog check attempt ${attempt}: hasDialog=${hasDialog}, hasOverlay=${!!hasOverlay}`);
+            
+            if (hasDialog || hasOverlay) {
+              console.log("Dialog/overlay detected, leaving menus open");
+              return; // Don't close menus
+            }
+            
+            if (attempt < maxAttempts) {
+              // Try again with longer delay
+              checkForDialog(attempt + 1, maxAttempts);
+            } else {
+              console.log("No dialog detected after multiple attempts, closing menus");
+              document.dispatchEvent(
+                new KeyboardEvent("keydown", {
+                  key: "Escape",
+                  code: "Escape",
+                  keyCode: 27,
+                })
+              );
+            }
+          }, attempt * 500); // Increasing delays: 500ms, 1s, 1.5s, 2s, 2.5s
+        };
+        
+        checkForDialog();
+      } else {
+        // Regular menu items - close after giving action time to complete
+        console.log("Regular menu item - closing menus after short delay");
+        setTimeout(() => {
+          document.dispatchEvent(
+            new KeyboardEvent("keydown", {
+              key: "Escape",
+              code: "Escape",
+              keyCode: 27,
+            })
+          );
+        }, 200); 
+      }
+    } else {
+     
+      console.warn("Path expects more items but current item has no submenu");
+      setTimeout(() => {
+        document.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "Escape",
+            code: "Escape",
+            keyCode: 27,
+          })
+        );
+      }, 400);
+    }
+  }, 150 + (depth * 100)); 
 }
 
 // Helper function that implements toggle functionality for editing and deleting
 function togglePin(path) {
-  chrome.storage.local.get("pinnedFunctions", (data) => {
+  safeStorageGet("pinnedFunctions", (data) => {
     let pins = data.pinnedFunctions || [];
     const index = pins.indexOf(path);
     if (index === -1) pins.push(path);
     else pins.splice(index, 1);
-    chrome.storage.local.set({ pinnedFunctions: pins }, updateQuickbar);
+    safeStorageSet({ pinnedFunctions: pins }, updateQuickbar);
   });
 }
 
 // Callback function that manages state
 function updateQuickbar() {
-  chrome.storage.local.get("pinnedFunctions", (data) => {
+  safeStorageGet("pinnedFunctions", (data) => {
     const buttons = data.pinnedFunctions || [];
     const container = document.getElementById("quickbar-buttons");
     container.innerHTML = "";
@@ -288,9 +594,9 @@ function updateQuickbar() {
       let iconSrc = null;
 
       if (func.includes("Fill color")) {
-        iconSrc = chrome.runtime.getURL("fill.svg");
+        iconSrc = safeGetURL("fill.svg");
       } else if (func.includes("Text color")) {
-        iconSrc = chrome.runtime.getURL("A.svg");
+        iconSrc = safeGetURL("A.svg");
       }
 
       if (iconSrc) {
@@ -361,7 +667,7 @@ function updateQuickbar() {
           "margin-left: 6px; background: #fff; color: black; border: 1px solid #ccc; cursor: pointer;";
         del.onclick = () => {
           buttons.splice(index, 1);
-          chrome.storage.local.set({ pinnedFunctions: buttons }, () => {
+          safeStorageSet({ pinnedFunctions: buttons }, () => {
             updateQuickbar();
             // Update stars in open menus
             const stars = document.querySelectorAll(".pin-star");
@@ -434,57 +740,52 @@ function enableDragDrop(container, data) {
       const idx = el.dataset.index;
       return data[idx]; // preserve the full path from the original data array
     });
-    chrome.storage.local.set({ pinnedFunctions: newOrder }, updateQuickbar);
+    safeStorageSet({ pinnedFunctions: newOrder }, updateQuickbar);
   });
 }
 
 // Helper function that gets the full menu path of a div component
 function getFullMenuPath(item) {
- 
   let label = "";
-  
   
   const contentEl = item.querySelector(".goog-menuitem-content");
   if (contentEl) {
     label = cleanText(contentEl.innerText || contentEl.textContent);
   }
   
- 
   if (!label) {
     label = cleanText(item.innerText || item.textContent);
   }
-  
   
   if (!label) {
     label = cleanText(item.getAttribute("aria-label"));
   }
   
-  let path = [label];
-  let current = item.closest('[role="menu"]');
-
-  while (current) {
-    const opener = document.querySelector(`[aria-controls="${current.id}"]`);
-    if (!opener) break;
+  
+  if (currentMenuPath.length > 0) {
+    // Verify that we're still in the same menu context
+    const allVisibleMenus = Array.from(document.querySelectorAll('[role="menu"]'))
+      .filter(menu => {
+        const style = window.getComputedStyle(menu);
+        return menu.offsetParent !== null && 
+               style.visibility !== 'hidden' && 
+               style.display !== 'none';
+      });
     
-    
-    let openerLabel = "";
-    const openerContent = opener.querySelector(".goog-menuitem-content");
-    if (openerContent) {
-      openerLabel = cleanText(openerContent.innerText || openerContent.textContent);
-    } else {
-      openerLabel = cleanText(opener.innerText || opener.textContent);
+    // If we have multiple menus open and a tracked path, use it
+    if (allVisibleMenus.length > 1) {
+      return [...currentMenuPath, label].join(" > ");
     }
-    
-    path.unshift(openerLabel);
-    current = opener.closest('[role="menu"]');
   }
-
-  const topMenu = document.querySelector(
-    'div[role="menubar"] [aria-expanded="true"]'
-  );
+  
+  // Fallback: try to determine path from DOM structure for single-level menus
+  let path = [label];
+  
+  // Add the top-level menu
+  const topMenu = document.querySelector('div[role="menubar"] [aria-expanded="true"]');
   if (topMenu) {
     const topLabel = cleanText(topMenu.innerText || topMenu.textContent);
-    if (path[0] !== topLabel) {
+    if (topLabel && path[0] !== topLabel) {
       path.unshift(topLabel);
     }
   }
@@ -496,7 +797,7 @@ function getFullMenuPath(item) {
 function injectStarsIntoMenu(menu) {
   const items = menu.querySelectorAll('[role="menuitem"]');
 
-  chrome.storage.local.get("pinnedFunctions", (data) => {
+  safeStorageGet("pinnedFunctions", (data) => {
     const pinned = data.pinnedFunctions || [];
 
     items.forEach((item) => {
@@ -545,12 +846,109 @@ function observeMenus() {
         if (!(added instanceof HTMLElement)) continue;
         if (added.getAttribute?.("role") === "menu") {
           injectStarsIntoMenu(added);
+          
+          // Track menu opening and update current path
+          updateCurrentMenuPath();
+        }
+      }
+    }
+  });
+
+  
+  const attributeObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.type === 'attributes' && 
+          (mutation.attributeName === 'class' || mutation.attributeName === 'aria-selected')) {
+        const target = mutation.target;
+        if (target.getAttribute?.('role') === 'menuitem' && 
+            target.getAttribute?.('aria-haspopup') === 'true') {
+          // A submenu item state changed, update our path tracking
+          setTimeout(updateCurrentMenuPath, 50);
         }
       }
     }
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
+  attributeObserver.observe(document.body, { 
+    attributes: true, 
+    subtree: true, 
+    attributeFilter: ['class', 'aria-selected'] 
+  });
+}
+
+// Track the current menu path as user navigates
+function updateCurrentMenuPath() {
+  currentMenuPath = [];
+  
+  // Get the top-level menu
+  const topMenu = document.querySelector('div[role="menubar"] [aria-expanded="true"]');
+  if (topMenu) {
+    const topLabel = cleanText(topMenu.innerText || topMenu.textContent);
+    if (topLabel) {
+      currentMenuPath.push(topLabel);
+    }
+  }
+  
+  // Get all visible menus in order
+  const allVisibleMenus = Array.from(document.querySelectorAll('[role="menu"]'))
+    .filter(menu => {
+      const style = window.getComputedStyle(menu);
+      return menu.offsetParent !== null && 
+             style.visibility !== 'hidden' && 
+             style.display !== 'none';
+    })
+    .sort((a, b) => {
+      // Sort by left position (parent menus are typically to the left)
+      const aRect = a.getBoundingClientRect();
+      const bRect = b.getBoundingClientRect();
+      return aRect.left - bRect.left;
+    });
+  
+  // For each menu (except the last), find the highlighted submenu item
+  for (let i = 0; i < allVisibleMenus.length - 1; i++) {
+    const menu = allVisibleMenus[i];
+    const submenuItems = Array.from(menu.querySelectorAll('[role="menuitem"][aria-haspopup="true"]'))
+      .filter(el => el.offsetParent !== null);
+    
+    // Look for highlighted or selected items
+    let activeItem = submenuItems.find(el => 
+      el.classList.contains('goog-menuitem-highlight') ||
+      el.classList.contains('goog-menuitem-selected') ||
+      el.getAttribute('aria-selected') === 'true'
+    );
+    
+    // If no highlighted item, try to find the one that logically opened the next menu
+    if (!activeItem && submenuItems.length > 0) {
+      const nextMenuRect = allVisibleMenus[i + 1]?.getBoundingClientRect();
+      if (nextMenuRect) {
+        // Find the submenu item closest to where the next menu appears
+        let closestItem = submenuItems[0];
+        let minDistance = Infinity;
+        
+        for (const submenuItem of submenuItems) {
+          const itemRect = submenuItem.getBoundingClientRect();
+          const distance = Math.abs(itemRect.top - nextMenuRect.top);
+          if (distance < minDistance) {
+            minDistance = distance;
+            closestItem = submenuItem;
+          }
+        }
+        activeItem = closestItem;
+      }
+    }
+    
+    if (activeItem) {
+      const label = cleanText(
+        activeItem.querySelector(".goog-menuitem-content")?.innerText ||
+        activeItem.innerText ||
+        activeItem.textContent
+      );
+      if (label) {
+        currentMenuPath.push(label);
+      }
+    }
+  }
 }
 
 function createToolbar() {
@@ -563,7 +961,7 @@ function createToolbar() {
   bar.style.border = "1px solid #ccc";
   bar.style.padding = "10px";
   bar.style.zIndex = 9999;
-  bar.style.cursor = "default"; // Only handle is draggable
+  bar.style.cursor = "default";
 
   // === Title bar ===
   const titleBar = document.createElement("div");
@@ -580,8 +978,8 @@ function createToolbar() {
   title.style.display = "block";
   title.style.cursor = "pointer";
 
-  const defaultSrc = chrome.runtime.getURL("star-default.svg");
-  const hoverSrc = chrome.runtime.getURL("star-hover.svg");
+  const defaultSrc = safeGetURL("star-default.svg");
+  const hoverSrc = safeGetURL("star-hover.svg");
 
   title.src = defaultSrc;
   title.draggable = false;
@@ -601,7 +999,7 @@ function createToolbar() {
   dragHandleWrapper.style.justifyContent = "center";
 
   const dragHandle = document.createElement("img");
-  dragHandle.src = chrome.runtime.getURL("gripper.svg");
+  dragHandle.src = safeGetURL("gripper.svg");
   dragHandle.alt = "Gripper";
   dragHandle.style.width = "25px";
   dragHandle.style.cursor = "move";
@@ -643,8 +1041,8 @@ function createToolbar() {
   document.body.appendChild(bar);
 
   // === Make only the star and gripper draggable ===
-  makeDraggable(title, bar); // star icon
-  makeDraggable(dragHandle, bar); // gripper icon
+  makeDraggable(title, bar);
+  makeDraggable(dragHandle, bar);
 
   // === Collapse/expand functionality ===
   let dragStartX = 0,
@@ -661,25 +1059,21 @@ function createToolbar() {
     const dx = Math.abs(e.clientX - dragStartX);
     const dy = Math.abs(e.clientY - dragStartY);
     if (dx < 5 && dy < 5) {
-      // Treat as click (toggle collapse)
       titleCollapsed = !titleCollapsed;
       updateQuickbar();
 
-      // Hide or show all children except the titleBar
       Array.from(bar.children).forEach((child) => {
         if (child !== titleBar) {
           child.style.display = titleCollapsed ? "none" : "";
         }
       });
 
-      // Hide or show everything inside titleBar except the image
       Array.from(titleBar.children).forEach((child) => {
         if (child !== title) {
           child.style.display = titleCollapsed ? "none" : "";
         }
       });
 
-      // Hide background and border
       bar.style.background = titleCollapsed ? "transparent" : "#fff";
       bar.style.border = titleCollapsed ? "none" : "1px solid #ccc";
       bar.style.padding = titleCollapsed ? "0px" : "10px";
@@ -706,7 +1100,7 @@ function makeDraggable(handle, target) {
     if (isDragging) {
       target.style.left = e.clientX - offsetX + "px";
       target.style.top = e.clientY - offsetY + "px";
-      target.style.right = "auto"; // Reset right when dragging
+      target.style.right = "auto";
     }
   });
 
@@ -716,100 +1110,58 @@ function makeDraggable(handle, target) {
   });
 }
 
-function preloadAllMenus() {
-  const topMenus = document.querySelectorAll(
-    'div[role="menubar"] [role="menuitem"]'
-  );
-
-  let index = 0;
-
-  function openMenu(menuBtn, callback) {
-    simulateClick(menuBtn); // open it
-    setTimeout(() => {
-      const submenus = document.querySelectorAll('[role="menu"]');
-
-      // preload each submenu by clicking its items that have children
-      const submenuItems = Array.from(
-        submenus[submenus.length - 1]?.querySelectorAll(
-          '[role="menuitem"][aria-haspopup="true"]'
-        ) || []
-      );
-
-      let subIndex = 0;
-      function openSubmenu() {
-        if (subIndex >= submenuItems.length) {
-          simulateClick(menuBtn); // close parent
-          callback();
-          return;
-        }
-        const item = submenuItems[subIndex];
-        simulateClick(item); // open inner submenu
-        setTimeout(() => {
-          simulateClick(item); // close it
-          subIndex++;
-          openSubmenu();
-        }, 200);
-      }
-
-      openSubmenu();
-    }, 200);
-  }
-
-  function nextTopMenu() {
-    if (index >= topMenus.length) return;
-    const btn = topMenus[index];
-    openMenu(btn, () => {
-      index++;
-      setTimeout(nextTopMenu, 200);
-    });
-  }
-
-  nextTopMenu();
-}
-
 window.addEventListener("load", () => {
   createToolbar();
   observeMenus();
-  // preloadAllMenus();
+  
+  // Reset menu path when menus are closed (like pressing Escape)
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      currentMenuPath = [];
+    }
+  });
+  
+  // Reset menu path when clicking outside menus
+  document.addEventListener("click", (e) => {
+    const clickedMenu = e.target.closest('[role="menu"], [role="menubar"]');
+    if (!clickedMenu) {
+      currentMenuPath = [];
+    }
+  });
 });
 
 window.addEventListener("contextmenu", (e) => {
   const target = e.target.closest("[aria-label], [title]");
   if (!target) return;
 
-  // Only apply to color swatches inside a known container
   const colorMenu = target.closest(
     ".docs-material-colorpalette, .docs-material-colorswatch, .goog-menu"
   );
   if (!colorMenu) return;
 
-  // Prevent browser default right-click menu
   e.preventDefault();
   e.stopPropagation();
 
-  // Get color name from aria-label or title
   const label =
     target.getAttribute("aria-label") || target.getAttribute("title");
   if (!label) return;
 
-  // Determine whether it's fill or text color
-  let prefix = "Color"; // fallback
+  let prefix = "Color";
   const parent = document.querySelector(
     '[aria-label*="Fill color"], [aria-label*="Text color"]'
   );
   if (parent?.getAttribute("aria-label")?.includes("Fill"))
-    prefix = "Text color";
-  if (parent?.getAttribute("aria-label")?.includes("Text"))
     prefix = "Fill color";
+  if (parent?.getAttribute("aria-label")?.includes("Text"))
+    prefix = "Text color";
 
   const path = `${prefix} > ${label}`;
 
-  // Store it and update
-  chrome.storage.local.get(["pinnedFunctions"], (data) => {
+  safeStorageGet(["pinnedFunctions"], (data) => {
     const pins = data.pinnedFunctions || [];
     if (!pins.includes(path)) {
       pins.push(path);
-      chrome.storage.local.set({ pinnedFunctions: pins }, updateQuickbar);
+      safeStorageSet({ pinnedFunctions: pins }, updateQuickbar);
     }
   });
 });
