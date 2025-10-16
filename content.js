@@ -2,7 +2,8 @@
 let lastTopMenu = null;
 let editingMode = false;
 let titleCollapsed = false;
-let currentMenuPath = []; 
+let currentMenuPath = [];
+let lastClickedColorButton = null; 
 
 
 function isExtensionContextValid() {
@@ -123,44 +124,236 @@ function cleanText(text) {
   );
 }
 
-// Callback function that triggers when tooltip button is clicked
+
 function triggerMenuPath(path) {
+  console.log("=== TRIGGER MENU PATH ===");
+  console.log("Full path:", path);
+  
   const labels = path.split(" > ").map((l) => l.trim());
   const [first, ...rest] = labels;
+  
+  console.log("First:", first);
+  console.log("Rest:", rest);
 
-  // === Special case: Text color / Fill color ===
+ 
   if (first === "Text color" || first === "Fill color") {
-    const btn = Array.from(document.querySelectorAll("[aria-label]")).find(
-      (el) => cleanText(el.getAttribute("aria-label")) === cleanText(first)
-    );
+    console.log("MATCHED COLOR CASE:", first);
+    
+    const possibleLabels = [];
+    if (first === "Fill color") {
+      possibleLabels.push("Fill color", "Fill colour", "Background color", "Background colour", "Cell color", "Cell colour");
+    } else {
+      possibleLabels.push("Text color", "Text colour", "Font color", "Font colour");
+    }
+    
+    let btn = null;
+    for (const label of possibleLabels) {
+      btn = Array.from(document.querySelectorAll("[aria-label]")).find(
+        (el) => cleanText(el.getAttribute("aria-label")) === cleanText(label)
+      );
+      if (btn) {
+        console.log(`Found ${first} button with label: "${btn.getAttribute("aria-label")}"`);
+        break;
+      }
+    }
+
+    // If still not found, try more generic selectors
+    if (!btn && first === "Fill color") {
+      const fillColorSelectors = [
+        '[data-tooltip*="fill"]',
+        '[data-tooltip*="background"]',
+        '[aria-label*="fill"]',
+        '[aria-label*="background"]',
+        '.docs-icon-fill-color',
+        '.docs-icon-background-color'
+      ];
+      
+      for (const selector of fillColorSelectors) {
+        const elements = document.querySelectorAll(selector);
+        if (elements.length > 0) {
+          btn = elements[0];
+          console.log(`Found fill color button using selector: ${selector}`);
+          break;
+        }
+      }
+    }
 
     if (!btn) {
-      alert(`Could not find "${first}" button.`);
+      
+      const allButtons = Array.from(document.querySelectorAll("[aria-label]"))
+        .filter(el => {
+          const label = el.getAttribute("aria-label").toLowerCase();
+          return label.includes("color") || label.includes("colour") || label.includes("fill") || label.includes("background");
+        })
+        .map(el => el.getAttribute("aria-label"));
+      
+      console.log(`Could not find "${first}" button. Available color-related buttons:`, allButtons);
+      alert(`Could not find "${first}" button. Check console for available options.`);
       return;
     }
 
-    // Step 1: Click the toolbar button
+   
+    console.log(`Clicking ${first} button...`);
+    
+    
     simulateClick(btn);
 
-    // Step 2: Wait for the color grid to appear and click the swatch
+    
     const targetColor = cleanText(rest.join(" > "));
-    const tryClickColor = () => {
-      const colorButtons = Array.from(
-        document.querySelectorAll("[aria-label]")
-      ).filter(
-        (el) =>
-          el.offsetParent !== null &&
-          cleanText(el.getAttribute("aria-label")) === targetColor
-      );
+    console.log(`Looking for color: "${targetColor}"`);
+    
+    const tryClickColor = (attempt = 1) => {
+      console.log(`Color search attempt ${attempt} for ${first}`);
+      
+      // For fill color, also look for dropdown menus that might appear
+      if (first === "Fill color") {
+        const dropdowns = document.querySelectorAll('[role="listbox"], [role="menu"], .goog-menu');
+        console.log(`Fill color dropdowns found: ${dropdowns.length}`);
+        
+        dropdowns.forEach((dropdown, index) => {
+          if (dropdown.offsetParent !== null) {
+            console.log(`Dropdown ${index} visible with ${dropdown.children.length} children`);
+          }
+        });
+      }
+      
+      // Look for color swatches in the color picker - cast a wider net
+      const allElements = Array.from(document.querySelectorAll("*")).filter(el => {
+        const className = el.className || "";
+        const classStr = typeof className === 'string' ? className : (className.toString ? className.toString() : "");
+        
+        return el.offsetParent !== null && (
+          el.getAttribute("aria-label") ||
+          el.getAttribute("title") ||
+          el.getAttribute("data-value") ||
+          classStr.includes("color") ||
+          classStr.includes("palette") ||
+          el.style.backgroundColor ||
+          (first === "Fill color" && (
+            classStr.includes("fill") ||
+            classStr.includes("background") ||
+            el.getAttribute("aria-label")?.toLowerCase().includes("fill")
+          ))
+        );
+      });
+      
+      console.log(`Found ${allElements.length} potential color elements`);
+      
+      // Try exact match first
+      let colorButtons = allElements.filter(el => {
+        const label = el.getAttribute("aria-label");
+        const title = el.getAttribute("title");
+        const dataValue = el.getAttribute("data-value");
+        
+        return cleanText(label) === targetColor ||
+               cleanText(title) === targetColor ||
+               cleanText(dataValue) === targetColor;
+      });
+
+      console.log(`Exact matches found: ${colorButtons.length}`);
+
+      // If no exact match, try partial/fuzzy matching
+      if (colorButtons.length === 0) {
+        const targetWords = targetColor.toLowerCase().split(/\s+/);
+        console.log(`Searching for words: ${targetWords.join(', ')}`);
+        
+        colorButtons = allElements.filter(el => {
+          const label = (el.getAttribute("aria-label") || el.getAttribute("title") || "").toLowerCase();
+          const hasAllWords = targetWords.every(word => label.includes(word));
+          const hasColorReference = label.includes("color") || label.includes("cyan") || label.includes("red") || 
+                                   label.includes("blue") || label.includes("green") || label.includes("yellow") ||
+                                   label.includes("orange") || label.includes("purple") || label.includes("pink") ||
+                                   label.includes("brown") || label.includes("gray") || label.includes("grey");
+          return hasAllWords && hasColorReference;
+        });
+        
+        console.log(`Fuzzy matches found: ${colorButtons.length}`);
+      }
+
+      // Also try looking for color swatches by common selectors and background color
+      if (colorButtons.length === 0) {
+        const colorSwatches = Array.from(document.querySelectorAll(
+          '.docs-material-colorpalette-cell, .goog-palette-cell, [role="gridcell"], .color-cell, .palette-cell, [style*="background-color"]'
+        )).filter(el => el.offsetParent !== null);
+        
+        console.log(`Found ${colorSwatches.length} color swatches`);
+        
+        colorButtons = colorSwatches.filter(el => {
+          const label = (el.getAttribute("aria-label") || el.getAttribute("title") || "").toLowerCase();
+          const targetWords = targetColor.toLowerCase().split(/\s+/);
+          return targetWords.some(word => label.includes(word));
+        });
+        
+        console.log(`Swatch matches found: ${colorButtons.length}`);
+      }
 
       if (colorButtons.length > 0) {
-        simulateClick(colorButtons[0]);
+        const selectedButton = colorButtons[0];
+        console.log(`Found color match: "${selectedButton.getAttribute("aria-label") || selectedButton.getAttribute("title")}" (${selectedButton.className})`);
+        
+        // Check if cells are selected
+        const selectedCells = document.querySelectorAll('.docs-sheet-active-cell, .docs-sheet-selected-cell, [aria-selected="true"]');
+        console.log(`Selected cells found: ${selectedCells.length}`);
+        
+        if (selectedCells.length === 0) {
+          console.warn('No cells appear to be selected. Color may not apply.');
+        }
+        
+        console.log(`About to click color: ${selectedButton.tagName} with classes: ${selectedButton.className}`);
+        
+        // Simple and direct color click for both fill and text
+        console.log(`Clicking color swatch for ${first}`);
+        simulateClick(selectedButton);
+        
+        // Wait and verify color application
+        setTimeout(() => {
+          console.log(`${first} color application completed`);
+          
+          // Check if the color picker is still open (might indicate the click didn't work)
+          const colorPickers = document.querySelectorAll('[role="dialog"], .goog-menu, .docs-material-colorpalette');
+          const openPickers = Array.from(colorPickers).filter(picker => 
+            picker.offsetParent !== null && 
+            getComputedStyle(picker).visibility !== 'hidden'
+          );
+          
+          if (openPickers.length > 0) {
+            console.warn('Color picker still appears to be open - color may not have been applied');
+          } else {
+            console.log('Color picker closed - color should be applied');
+          }
+        }, 500);
+      } else if (attempt < 3) {
+        // Retry up to 3 times with increasing delays
+        console.log(`No color found, retrying in ${300 * attempt}ms...`);
+        setTimeout(() => tryClickColor(attempt + 1), 300 * attempt);
       } else {
-        alert(`Could not find color "${rest.join(" > ")}"`);
+        // Debug: log available colors to help troubleshoot
+        console.log("=== DEBUG INFO ===");
+        console.log("Target color:", targetColor);
+        console.log("Button type:", first);
+        
+        const visibleElements = allElements.slice(0, 20); // Limit to first 20 to avoid spam
+        console.log("Sample visible elements with color info:", visibleElements.map(el => ({
+          tag: el.tagName,
+          label: el.getAttribute("aria-label"),
+          title: el.getAttribute("title"), 
+          dataValue: el.getAttribute("data-value"),
+          className: el.className,
+          backgroundColor: el.style.backgroundColor
+        })));
+        
+        alert(`Could not find color "${rest.join(" > ")}" for ${first}. Check console for debug info.`);
       }
     };
 
-    setTimeout(tryClickColor, 300);
+    setTimeout(tryClickColor, 500); // Increased initial delay
+    return;
+  }
+
+  // === SIMPLE: Convert generic "Color" to "Text color" ===
+  if (first === "Color") {
+    console.log("Converting generic Color path to Text color:", path);
+    triggerMenuPath(`Text color > ${rest.join(" > ")}`);
     return;
   }
 
@@ -595,8 +788,12 @@ function updateQuickbar() {
 
       if (func.includes("Fill color")) {
         iconSrc = safeGetURL("fill.svg");
+        console.log("QUICKBAR: Fill color detected:", func);
       } else if (func.includes("Text color")) {
         iconSrc = safeGetURL("A.svg");
+        console.log("QUICKBAR: Text color detected:", func);
+      } else {
+        console.log("QUICKBAR: Unknown color type:", func);
       }
 
       if (iconSrc) {
@@ -778,6 +975,168 @@ function getFullMenuPath(item) {
     }
   }
   
+  
+  const isColorItem = label && (
+    label.toLowerCase().includes('color') ||
+    label.match(/\b(red|green|blue|yellow|orange|purple|pink|cyan|magenta|black|white|gray|grey)\b/i) ||
+    label.match(/\b(light|dark)\s+(red|green|blue|yellow|orange|purple|pink|cyan|magenta|gray|grey)\b/i) ||
+    label.match(/\b(red|green|blue|yellow|orange|purple|pink|cyan|magenta|gray|grey)\s+\d+\b/i)
+  );
+  
+  if (isColorItem) {
+    console.log("Detected color item:", label);
+    console.log("Last clicked color button:", lastClickedColorButton);
+    
+    
+    console.log("=== COLOR DETECTION DEBUG ===");
+    console.log("lastClickedColorButton:", lastClickedColorButton);
+    
+    
+    let isFromFillColor = false;
+    let isFromTextColor = false;
+    
+    
+    if (lastClickedColorButton === 'fill') {
+      isFromFillColor = true;
+      console.log("Method 1: Detected FILL from tracked click");
+    } else if (lastClickedColorButton === 'text') {
+      isFromTextColor = true;
+      console.log("Method 1: Detected TEXT from tracked click");
+    }
+    
+    // Method 2: Check BOTH fill and text color buttons for active states
+    if (!isFromFillColor && !isFromTextColor) {
+      const fillButtons = Array.from(document.querySelectorAll('*[aria-label], *[data-tooltip], *[title]')).filter(btn => {
+        const btnLabel = (btn.getAttribute('aria-label') || btn.getAttribute('data-tooltip') || btn.getAttribute('title') || '').toLowerCase();
+        return btnLabel.includes('fill') || btnLabel.includes('background') || btnLabel.includes('cell color');
+      });
+      
+      const textButtons = Array.from(document.querySelectorAll('*[aria-label], *[data-tooltip], *[title]')).filter(btn => {
+        const btnLabel = (btn.getAttribute('aria-label') || btn.getAttribute('data-tooltip') || btn.getAttribute('title') || '').toLowerCase();
+        return (btnLabel.includes('text') && btnLabel.includes('color')) || btnLabel.includes('font color');
+      });
+      
+      console.log("Checking", fillButtons.length, "fill buttons and", textButtons.length, "text buttons");
+      
+      // Check fill buttons
+      for (const btn of fillButtons) {
+        const btnLabel = (btn.getAttribute('aria-label') || btn.getAttribute('data-tooltip') || btn.getAttribute('title') || '').toLowerCase();
+        const isPressed = btn.getAttribute('aria-pressed') === 'true';
+        const isChecked = btn.classList.contains('goog-toolbar-button-checked');
+        const isActive = btn.classList.contains('active');
+        const hasSelectedClass = btn.classList.contains('goog-toolbar-button-selected');
+        
+        console.log("Fill button:", btnLabel, "pressed:", isPressed, "checked:", isChecked, "active:", isActive, "selected:", hasSelectedClass);
+        
+        if (isPressed || isChecked || isActive || hasSelectedClass) {
+          isFromFillColor = true;
+          console.log("Method 2: Detected active fill button:", btnLabel);
+          break;
+        }
+      }
+      
+      // Check text buttons (only if fill not active)
+      if (!isFromFillColor) {
+        for (const btn of textButtons) {
+          const btnLabel = (btn.getAttribute('aria-label') || btn.getAttribute('data-tooltip') || btn.getAttribute('title') || '').toLowerCase();
+          const isPressed = btn.getAttribute('aria-pressed') === 'true';
+          const isChecked = btn.classList.contains('goog-toolbar-button-checked');
+          const isActive = btn.classList.contains('active');
+          const hasSelectedClass = btn.classList.contains('goog-toolbar-button-selected');
+          
+          console.log("Text button:", btnLabel, "pressed:", isPressed, "checked:", isChecked, "active:", isActive, "selected:", hasSelectedClass);
+          
+          if (isPressed || isChecked || isActive || hasSelectedClass) {
+            isFromTextColor = true;
+            console.log("Method 2: Detected active text button:", btnLabel);
+            break;
+          }
+        }
+      }
+    }
+    
+    
+    if (!isFromFillColor && !isFromTextColor) {
+      console.log("No clear button state, checking DOM selectors...");
+      
+      const fillColorIndicators = [
+        '.docs-icon-fill-color',
+        '[data-command-name*="fill"]',
+        '[data-command-name*="background"]'
+      ];
+      
+      const textColorIndicators = [
+        '.docs-icon-text-color', 
+        '[data-command-name*="text"]',
+        '[aria-label*="Text color"]'
+      ];
+      
+      
+      for (const selector of fillColorIndicators) {
+        const element = document.querySelector(selector);
+        if (element && (element.classList.contains('goog-toolbar-button-checked') || element.getAttribute('aria-pressed') === 'true')) {
+          isFromFillColor = true;
+          console.log("Method 3: Detected fill color via selector:", selector);
+          break;
+        }
+      }
+      
+      
+      if (!isFromFillColor) {
+        for (const selector of textColorIndicators) {
+          const element = document.querySelector(selector);
+          if (element && (element.classList.contains('goog-toolbar-button-checked') || element.getAttribute('aria-pressed') === 'true')) {
+            isFromTextColor = true;
+            console.log("Method 3: Detected text color via selector:", selector);
+            break;
+          }
+        }
+      }
+    }
+    
+    // FINAL DECISION with proper priority
+    if (isFromTextColor && !isFromFillColor) {
+      console.log("=== SAVING AS TEXT COLOR ===");
+      return `Text color > ${label}`;
+    } else if (isFromFillColor && !isFromTextColor) {
+      console.log("=== SAVING AS FILL COLOR ===");
+      return `Fill color > ${label}`;
+    } else if (isFromTextColor && isFromFillColor) {
+      // Both detected - use tracking as tiebreaker
+      if (lastClickedColorButton === 'text') {
+        console.log("=== BOTH DETECTED - USING TEXT FROM TRACKING ===");
+        return `Text color > ${label}`;
+      } else if (lastClickedColorButton === 'fill') {
+        console.log("=== BOTH DETECTED - USING FILL FROM TRACKING ===");
+        return `Fill color > ${label}`;
+      } else {
+        console.log("=== BOTH DETECTED - DEFAULTING TO TEXT ===");
+        return `Text color > ${label}`;
+      }
+    } else {
+      // Neither clearly detected - default to text
+      console.log("=== NO CLEAR DETECTION - DEFAULTING TO TEXT ===");
+      return `Text color > ${label}`;
+    }
+    
+    // Fallback: try to detect from DOM state
+    const activeFillColorBtn = document.querySelector('[aria-label*="Fill"][aria-label*="color"], [aria-label*="Fill"][aria-label*="colour"], [aria-label*="Background"][aria-label*="color"]');
+    const activeTextColorBtn = document.querySelector('[aria-label*="Text"][aria-label*="color"], [aria-label*="Text"][aria-label*="colour"]');
+    
+    // Check which one appears to be in an active state
+    if (activeFillColorBtn && (activeFillColorBtn.getAttribute('aria-pressed') === 'true' || activeFillColorBtn.classList.contains('goog-toolbar-button-checked'))) {
+      console.log("Pinning as Fill color based on DOM state:", label);
+      return `Fill color > ${label}`;
+    } else if (activeTextColorBtn && (activeTextColorBtn.getAttribute('aria-pressed') === 'true' || activeTextColorBtn.classList.contains('goog-toolbar-button-checked'))) {
+      console.log("Pinning as Text color based on DOM state:", label);
+      return `Text color > ${label}`;
+    }
+    
+    // Final fallback: default to text color
+    console.log("No reliable color type detection, defaulting to text color");
+    return `Text color > ${label}`;
+  }
+  
   // Fallback: try to determine path from DOM structure for single-level menus
   let path = [label];
   
@@ -839,6 +1198,56 @@ function injectStarsIntoMenu(menu) {
 }
 
 // Setup function on load
+// Track color button clicks
+function trackColorButtonClicks() {
+  console.log("=== TRACKING COLOR BUTTONS ===");
+  
+  // Add click listeners to ALL buttons, not just color ones
+  const allButtons = document.querySelectorAll('button, div[role="button"], span[role="button"], *[onclick], *[aria-label], *[data-tooltip]');
+  console.log("Found", allButtons.length, "potential buttons to track");
+  
+  let trackedCount = 0;
+  
+  allButtons.forEach(button => {
+    if (!button.hasAttribute('data-color-tracked')) {
+      const label = (button.getAttribute('aria-label') || button.getAttribute('data-tooltip') || button.getAttribute('title') || button.textContent || '').toLowerCase();
+      
+      
+      if (label.includes('fill') || label.includes('background') || label.includes('cell color') || 
+          label.includes('text color') || label.includes('font color') || label.includes('colour')) {
+        
+        button.setAttribute('data-color-tracked', 'true');
+        trackedCount++;
+        
+        console.log("Tracking button:", label.substring(0, 50));
+        
+        button.addEventListener('click', (e) => {
+          console.log("=== BUTTON CLICKED ===");
+          console.log("Button label:", label);
+          
+          if (label.includes('fill') || label.includes('background') || label.includes('cell color')) {
+            lastClickedColorButton = 'fill';
+            console.log('>>> TRACKED FILL COLOR BUTTON CLICK <<<');
+          } else if (label.includes('text') || label.includes('font')) {
+            lastClickedColorButton = 'text';
+            console.log('>>> TRACKED TEXT COLOR BUTTON CLICK <<<');
+          }
+          
+          
+          setTimeout(() => {
+            if (lastClickedColorButton) {
+              console.log("Clearing color button tracking after 30 seconds");
+              lastClickedColorButton = null;
+            }
+          }, 30000);
+        });
+      }
+    }
+  });
+  
+  console.log("Tracked", trackedCount, "color-related buttons");
+}
+
 function observeMenus() {
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
@@ -875,6 +1284,12 @@ function observeMenus() {
     subtree: true, 
     attributeFilter: ['class', 'aria-selected'] 
   });
+
+  
+  trackColorButtonClicks();
+  
+  
+  setInterval(trackColorButtonClicks, 2000);
 }
 
 // Track the current menu path as user navigates
@@ -1110,7 +1525,8 @@ function makeDraggable(handle, target) {
   });
 }
 
-window.addEventListener("load", () => {
+// Initialize when DOM is ready
+function init() {
   createToolbar();
   observeMenus();
   
@@ -1128,6 +1544,55 @@ window.addEventListener("load", () => {
       currentMenuPath = [];
     }
   });
+}
+
+window.addEventListener("load", init);
+
+// Re-initialize when page navigation occurs
+let lastUrl = location.href;
+new MutationObserver(() => {
+  const url = location.href;
+  if (url !== lastUrl) {
+    lastUrl = url;
+    setTimeout(init, 1000);
+  }
+}).observe(document, {subtree: true, childList: true});
+
+// Also re-track color buttons when significant DOM changes occur
+let colorTrackingObserver = new MutationObserver((mutations) => {
+  let shouldRetrack = false;
+  
+  mutations.forEach(mutation => {
+    if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+      mutation.addedNodes.forEach(node => {
+        if (node.nodeType === 1) { // Element node
+          const text = (node.textContent || '').toLowerCase();
+          const label = (node.getAttribute && (node.getAttribute('aria-label') || node.getAttribute('data-tooltip') || '')).toLowerCase();
+          
+          if (text.includes('color') || label.includes('color') || 
+              text.includes('fill') || label.includes('fill') ||
+              text.includes('text') || label.includes('text')) {
+            shouldRetrack = true;
+          }
+        }
+      });
+    }
+  });
+  
+  if (shouldRetrack) {
+    console.log("DOM changed, re-tracking color buttons...");
+    setTimeout(trackColorButtonClicks, 500);
+  }
+});
+
+// Start observing after initial load
+window.addEventListener("load", () => {
+  setTimeout(() => {
+    colorTrackingObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  }, 2000);
 });
 
 window.addEventListener("contextmenu", (e) => {
@@ -1146,16 +1611,136 @@ window.addEventListener("contextmenu", (e) => {
     target.getAttribute("aria-label") || target.getAttribute("title");
   if (!label) return;
 
-  let prefix = "Color";
-  const parent = document.querySelector(
-    '[aria-label*="Fill color"], [aria-label*="Text color"]'
-  );
-  if (parent?.getAttribute("aria-label")?.includes("Fill"))
-    prefix = "Fill color";
-  if (parent?.getAttribute("aria-label")?.includes("Text"))
+  console.log("=== RIGHT-CLICK CONTEXT MENU ===");
+  console.log("Color label:", label);
+
+  // ENHANCED DETECTION FOR RIGHT-CLICK CONTEXT
+  let prefix = "Text color"; // Default fallback
+  let isFromFillColor = false;
+  let isFromTextColor = false;
+  
+  // Method 1: Check BOTH fill and text color buttons to see which is active
+  const fillColorButtons = Array.from(document.querySelectorAll('*[aria-label], *[data-tooltip], *[title]')).filter(btn => {
+    const btnLabel = (btn.getAttribute('aria-label') || btn.getAttribute('data-tooltip') || btn.getAttribute('title') || '').toLowerCase();
+    return btnLabel.includes('fill') || btnLabel.includes('background') || btnLabel.includes('cell color');
+  });
+  
+  const textColorButtons = Array.from(document.querySelectorAll('*[aria-label], *[data-tooltip], *[title]')).filter(btn => {
+    const btnLabel = (btn.getAttribute('aria-label') || btn.getAttribute('data-tooltip') || btn.getAttribute('title') || '').toLowerCase();
+    return (btnLabel.includes('text') && btnLabel.includes('color')) || btnLabel.includes('font color');
+  });
+  
+  console.log("Found", fillColorButtons.length, "fill color buttons and", textColorButtons.length, "text color buttons");
+  
+  // Check fill color buttons
+  for (const btn of fillColorButtons) {
+    const isPressed = btn.getAttribute('aria-pressed') === 'true';
+    const isChecked = btn.classList.contains('goog-toolbar-button-checked');
+    const isActive = btn.classList.contains('active');
+    const hasSelectedClass = btn.classList.contains('goog-toolbar-button-selected');
+    
+    console.log("Fill button check:", btn.getAttribute('aria-label'), "pressed:", isPressed, "checked:", isChecked, "active:", isActive);
+    
+    if (isPressed || isChecked || isActive || hasSelectedClass) {
+      isFromFillColor = true;
+      console.log("Context menu: Detected active fill button:", btn.getAttribute('aria-label'));
+      break;
+    }
+  }
+  
+  // Check text color buttons  
+  for (const btn of textColorButtons) {
+    const isPressed = btn.getAttribute('aria-pressed') === 'true';
+    const isChecked = btn.classList.contains('goog-toolbar-button-checked');
+    const isActive = btn.classList.contains('active');
+    const hasSelectedClass = btn.classList.contains('goog-toolbar-button-selected');
+    
+    console.log("Text button check:", btn.getAttribute('aria-label'), "pressed:", isPressed, "checked:", isChecked, "active:", isActive);
+    
+    if (isPressed || isChecked || isActive || hasSelectedClass) {
+      isFromTextColor = true;
+      console.log("Context menu: Detected active text button:", btn.getAttribute('aria-label'));
+      break;
+    }
+  }
+  
+  
+  if (lastClickedColorButton === 'fill' && !isFromTextColor) {
+    isFromFillColor = true;
+    console.log("Context menu: Using recent button tracking for fill");
+  } else if (lastClickedColorButton === 'text' && !isFromFillColor) {
+    isFromTextColor = true;
+    console.log("Context menu: Using recent button tracking for text");
+  }
+  
+  
+  if (!isFromFillColor && !isFromTextColor) {
+    console.log("No clear button state detected, checking DOM context...");
+    
+    
+    const fillColorIndicators = [
+      '.docs-icon-fill-color',
+      '[data-command-name*="fill"]',
+      '[data-command-name*="background"]'
+    ];
+    
+    const textColorIndicators = [
+      '.docs-icon-text-color',
+      '[data-command-name*="text"]',
+      '[aria-label*="Text color"]'
+    ];
+    
+    // Check fill indicators
+    for (const selector of fillColorIndicators) {
+      const element = document.querySelector(selector);
+      if (element && (element.classList.contains('goog-toolbar-button-checked') || element.getAttribute('aria-pressed') === 'true')) {
+        isFromFillColor = true;
+        console.log("Context menu: Detected fill color via selector:", selector);
+        break;
+      }
+    }
+    
+    // Check text indicators (only if fill not found)
+    if (!isFromFillColor) {
+      for (const selector of textColorIndicators) {
+        const element = document.querySelector(selector);
+        if (element && (element.classList.contains('goog-toolbar-button-checked') || element.getAttribute('aria-pressed') === 'true')) {
+          isFromTextColor = true;
+          console.log("Context menu: Detected text color via selector:", selector);
+          break;
+        }
+      }
+    }
+  }
+  
+  
+  if (isFromTextColor && !isFromFillColor) {
     prefix = "Text color";
+    console.log("=== CONTEXT MENU: DETERMINED TEXT COLOR ===");
+  } else if (isFromFillColor && !isFromTextColor) {
+    prefix = "Fill color";
+    console.log("=== CONTEXT MENU: DETERMINED FILL COLOR ===");
+  } else if (isFromTextColor && isFromFillColor) {
+    // Both detected - use recent tracking as tiebreaker
+    if (lastClickedColorButton === 'text') {
+      prefix = "Text color";
+      console.log("=== CONTEXT MENU: BOTH DETECTED - USING TEXT FROM TRACKING ===");
+    } else if (lastClickedColorButton === 'fill') {
+      prefix = "Fill color";
+      console.log("=== CONTEXT MENU: BOTH DETECTED - USING FILL FROM TRACKING ===");
+    } else {
+      // Default to text color when unsure
+      prefix = "Text color";
+      console.log("=== CONTEXT MENU: BOTH DETECTED - DEFAULTING TO TEXT ===");
+    }
+  } else {
+    
+    prefix = "Text color";
+    console.log("=== CONTEXT MENU: NO CLEAR DETECTION - DEFAULTING TO TEXT ===");
+  }
 
   const path = `${prefix} > ${label}`;
+  console.log("Context menu final path:", path);
 
   safeStorageGet(["pinnedFunctions"], (data) => {
     const pins = data.pinnedFunctions || [];
