@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "StarFlo",
-  "version": "1.0",
+  "version": "1.1",
   "permissions": ["storage", "scripting", "activeTab", "contextMenus"],
   "host_permissions": ["https://docs.google.com/spreadsheets/*"],
   "action": {
