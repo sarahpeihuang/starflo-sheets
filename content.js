@@ -3,7 +3,8 @@ let lastTopMenu = null;
 let editingMode = false;
 let titleCollapsed = false;
 let currentMenuPath = [];
-let lastClickedColorButton = null; 
+let lastClickedColorButton = null;
+let isViewOnlySheet = false; 
 
 
 function isExtensionContextValid() {
@@ -58,6 +59,93 @@ function safeGetURL(path) {
     console.warn('getURL failed:', error);
     return `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"></svg>`;
   }
+}
+
+// Function to detect if the current sheet is view-only
+function detectViewOnlySheet() {
+  // Method 1: Check URL for view-only indicators (most reliable)
+  const url = window.location.href;
+  if (url.includes('/view') || url.includes('/preview') || url.includes('usp=sharing')) {
+    console.log("View-only detected via URL pattern");
+    return true;
+  }
+  
+  // Early return if document isn't ready yet
+  if (!document.body || document.readyState === 'loading') {
+    console.log("Document not ready, deferring view-only detection");
+    return false;
+  }
+  
+  // Method 2: Check for "View only" badge in Google Sheets interface
+  const viewOnlySelectors = [
+    '[title*="View only"]',
+    '[aria-label*="View only"]',
+    '.docs-titlebar-badges',
+    '.docs-activity-indicator',
+    '[data-tooltip*="view only"]'
+  ];
+  
+  for (const selector of viewOnlySelectors) {
+    const elements = document.querySelectorAll(selector);
+    for (const element of elements) {
+      const text = (element.textContent || '').toLowerCase();
+      const ariaLabel = (element.getAttribute('aria-label') || '').toLowerCase();
+      const title = (element.getAttribute('title') || '').toLowerCase();
+      
+      if (text.includes('view only') || text.includes('viewing only') ||
+          ariaLabel.includes('view only') || title.includes('view only')) {
+        console.log("View-only detected via UI element:", selector);
+        return true;
+      }
+    }
+  }
+  
+  // Method 3: Check page title
+  const titleElement = document.querySelector('title');
+  if (titleElement && titleElement.textContent.includes('- View only')) {
+    console.log("View-only detected via document title");
+    return true;
+  }
+  
+  // Method 4: Check for absence of key editing features in Google Sheets
+  // Look for the absence of common edit buttons that appear in editable sheets
+  const editFeatureSelectors = [
+    '[aria-label*="Share"]',
+    '[aria-label*="Insert"]',
+    '[aria-label*="Format"]',
+    '[aria-label*="Tools"]',
+    '[aria-label*="Extensions"]',
+    '[data-tooltip*="Share"]',
+    'div[role="menubar"]' // The main menu bar
+  ];
+  
+  let editFeaturesFound = 0;
+  for (const selector of editFeatureSelectors) {
+    const elements = document.querySelectorAll(selector);
+    if (elements.length > 0) {
+      editFeaturesFound++;
+    }
+  }
+  
+  // If very few edit features are found, likely view-only
+  if (editFeaturesFound < 3) {
+    console.log("View-only detected via missing edit features, found:", editFeaturesFound);
+    return true;
+  }
+  
+  // Method 5: Check for specific Google Sheets view-only indicators
+  // In view-only mode, certain toolbar sections are hidden or disabled
+  const toolbar = document.querySelector('.docs-material');
+  if (toolbar) {
+    const toolbarButtons = toolbar.querySelectorAll('div[role="button"], button');
+    if (toolbarButtons.length < 10) { // Editable sheets typically have many toolbar buttons
+      console.log("View-only detected via limited toolbar buttons");
+      return true;
+    }
+  }
+  
+  console.log("Sheet appears to be editable, edit features found:", editFeaturesFound);
+  return false;
 }
 
 // Helper function that simulates click action
@@ -843,7 +931,7 @@ function updateQuickbar() {
       });
 
       // Add hover effects
-      if (!editingMode) {
+      if (!editingMode && !isViewOnlySheet) {
         btn.onclick = () => triggerMenuPath(func);
         btn.addEventListener("mouseenter", () => {
           btn.style.backgroundColor = "#D9D9D9";
@@ -851,6 +939,15 @@ function updateQuickbar() {
         btn.addEventListener("mouseleave", () => {
           btn.style.backgroundColor = "#ffffff";
         });
+      } else if (isViewOnlySheet) {
+        // For view-only sheets, disable interactions
+        btn.style.cursor = "default";
+        btn.style.opacity = "0.6";
+        btn.onclick = () => {
+          console.log("Button click blocked - view-only sheet");
+          // Optional: Show a subtle notification
+          // alert("This function is not available in view-only mode");
+        };
       }
 
       if (editingMode) {
@@ -1496,6 +1593,28 @@ function createToolbar() {
   });
 
   updateQuickbar();
+  
+  // Auto-minimize starbar for view-only sheets
+  if (isViewOnlySheet) {
+    console.log("Auto-minimizing starbar for view-only sheet");
+    titleCollapsed = true;
+    
+    Array.from(bar.children).forEach((child) => {
+      if (child !== titleBar) {
+        child.style.display = "none";
+      }
+    });
+
+    Array.from(titleBar.children).forEach((child) => {
+      if (child !== title) {
+        child.style.display = "none";
+      }
+    });
+
+    bar.style.background = "transparent";
+    bar.style.border = "none";
+    bar.style.padding = "0px";
+  }
 }
 
 // Function that allows certain components to be draggable
@@ -1527,6 +1646,53 @@ function makeDraggable(handle, target) {
 
 // Initialize when DOM is ready
 function init() {
+  // Detect if this is a view-only sheet with retry mechanism
+  const detectWithRetry = (attempt = 1, maxAttempts = 5) => {
+    isViewOnlySheet = detectViewOnlySheet();
+    console.log(`Sheet view-only detection attempt ${attempt}:`, isViewOnlySheet);
+    
+    // If we haven't detected view-only yet and there are more attempts, try again
+    if (!isViewOnlySheet && attempt < maxAttempts) {
+      setTimeout(() => detectWithRetry(attempt + 1, maxAttempts), 1000 * attempt);
+    } else {
+      console.log("Final view-only status:", isViewOnlySheet);
+      // Update the toolbar if it was already created and we now detect view-only
+      if (isViewOnlySheet && attempt > 1) {
+        const bar = document.getElementById("quickbar");
+        if (bar) {
+          console.log("Updating existing toolbar for view-only mode");
+          const titleBar = bar.querySelector("div:first-child");
+          const title = titleBar?.querySelector("img");
+          
+          if (titleBar && title) {
+            titleCollapsed = true;
+            
+            Array.from(bar.children).forEach((child) => {
+              if (child !== titleBar) {
+                child.style.display = "none";
+              }
+            });
+
+            Array.from(titleBar.children).forEach((child) => {
+              if (child !== title) {
+                child.style.display = "none";
+              }
+            });
+
+            bar.style.background = "transparent";
+            bar.style.border = "none";
+            bar.style.padding = "0px";
+            
+            // Update button interactions
+            updateQuickbar();
+          }
+        }
+      }
+    }
+  };
+  
+  detectWithRetry();
+  
   createToolbar();
   observeMenus();
   
@@ -1554,6 +1720,8 @@ new MutationObserver(() => {
   const url = location.href;
   if (url !== lastUrl) {
     lastUrl = url;
+    // Reset view-only status for new page
+    isViewOnlySheet = false;
     setTimeout(init, 1000);
   }
 }).observe(document, {subtree: true, childList: true});
