@@ -1388,6 +1388,17 @@ function getFullMenuPath(item) {
 
 // Injects stars into menus
 function injectStarsIntoMenu(menu) {
+  // Skip if this is a sheet tab context menu (e.g., contains "Rename", "Duplicate", etc.)
+  const firstItemText =
+    menu.querySelector('[role="menuitem"]')?.innerText?.toLowerCase() || "";
+  const tabFunctions = ["delete"];
+  console.log("Bye");
+  console.log(firstItemText);
+  console.log("Hello");
+  if (tabFunctions.includes(firstItemText)) {
+    return; // Don't inject stars here
+  }
+
   const items = menu.querySelectorAll('[role="menuitem"]');
 
   safeStorageGet("pinnedFunctions", (data) => {
