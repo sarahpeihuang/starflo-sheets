@@ -1392,9 +1392,6 @@ function injectStarsIntoMenu(menu) {
   const firstItemText =
     menu.querySelector('[role="menuitem"]')?.innerText?.toLowerCase() || "";
   const tabFunctions = ["delete"];
-  console.log("Bye");
-  console.log(firstItemText);
-  console.log("Hello");
   if (tabFunctions.includes(firstItemText)) {
     return; // Don't inject stars here
   }
