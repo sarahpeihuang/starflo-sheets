@@ -1391,7 +1391,7 @@ function injectStarsIntoMenu(menu) {
   // Skip if this is a sheet tab context menu (e.g., contains "Rename", "Duplicate", etc.)
   const firstItemText =
     menu.querySelector('[role="menuitem"]')?.innerText?.toLowerCase() || "";
-  const tabFunctions = ["delete"];
+  const tabFunctions = ["delete", "create new spreadsheet"];
   if (tabFunctions.includes(firstItemText)) {
     return; // Don't inject stars here
   }
