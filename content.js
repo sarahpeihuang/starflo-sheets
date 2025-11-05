@@ -1527,6 +1527,18 @@ function makeDraggable(handle, target) {
 
 // Initialize when DOM is ready
 function init() {
+  
+  const currentUrl = window.location.href;
+  const isHomePage = currentUrl.match(/^https:\/\/docs\.google\.com\/spreadsheets\/(u\/\d+\/)?$/) ||
+                     currentUrl.match(/^https:\/\/docs\.google\.com\/spreadsheets\/(u\/\d+\/)?\?.*$/) ||
+                     currentUrl.match(/^https:\/\/docs\.google\.com\/spreadsheets\/(u\/\d+\/)?#.*$/) ||
+                     !currentUrl.includes('/d/'); // Any sheets URL without '/d/' is likely the home page
+  
+  if (isHomePage) {
+    console.log('StarFlo: Detected Google Sheets home page, not showing startbar');
+    return;
+  }
+  
   createToolbar();
   observeMenus();
   
@@ -1554,6 +1566,13 @@ new MutationObserver(() => {
   const url = location.href;
   if (url !== lastUrl) {
     lastUrl = url;
+    
+   
+    const existingToolbar = document.getElementById('quickbar');
+    if (existingToolbar) {
+      existingToolbar.remove();
+    }
+    
     setTimeout(init, 1000);
   }
 }).observe(document, {subtree: true, childList: true});
