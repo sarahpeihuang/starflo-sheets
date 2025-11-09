@@ -1,4 +1,8 @@
 // content.js
+// StarBar Chrome Extension - Google Sheets productivity toolbar
+// Features:
+// - Pin frequently used functions to a floating toolbar
+// - Hotkey: Ctrl+1 triggers the oldest (first) saved function
 let lastTopMenu = null;
 let editingMode = false;
 let titleCollapsed = false;
@@ -807,7 +811,10 @@ function updateQuickbar() {
 
         // Wrap text so icon and label align nicely
         const textWrapper = document.createElement("span");
-        textWrapper.innerText = btnText;
+        textWrapper.innerHTML = btnText + (index === 0 ? `<span style="font-size: 10px; opacity: 0.7; margin-left: 4px;">(Ctrl+1)</span>` : '');
+        textWrapper.style.display = "flex";
+        textWrapper.style.alignItems = "center";
+        textWrapper.style.justifyContent = "center";
 
         btn.innerText = "";
         btn.style.display = "flex";
@@ -825,7 +832,7 @@ function updateQuickbar() {
         btn.appendChild(iconImg);
         btn.appendChild(textWrapper);
       } else {
-        btn.innerText = btnText; // fallback for non-color buttons
+        btn.innerHTML = btnText + (index === 0 ? `<span style="font-size: 10px; opacity: 0.7; margin-left: 4px;">(Ctrl+1)</span>` : ''); // fallback for non-color buttons
       }
       Object.assign(btn.style, {
         background: "#ffffff",
@@ -841,6 +848,13 @@ function updateQuickbar() {
         fontFamily:
           "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
       });
+
+      // Add tooltip for hotkey information
+      if (index === 0) {
+        btn.title = `Click or press Ctrl+1 to activate: ${btnText}`;
+      } else {
+        btn.title = `Click to activate: ${btnText}`;
+      }
 
       // Add hover effects
       if (!editingMode) {
@@ -1529,6 +1543,91 @@ function makeDraggable(handle, target) {
   });
 }
 
+// Setup hotkey functionality for starBar functions
+function setupHotkeys() {
+  document.addEventListener("keydown", (e) => {
+    // Don't trigger hotkeys if user is typing in an input field
+    const activeElement = document.activeElement;
+    if (activeElement && (
+      activeElement.tagName === 'INPUT' ||
+      activeElement.tagName === 'TEXTAREA' ||
+      activeElement.contentEditable === 'true' ||
+      activeElement.isContentEditable
+    )) {
+      return;
+    }
+    
+    // Check for Ctrl+1 only
+    if (e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey && e.key === '1') {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Get the pinned functions
+      safeStorageGet("pinnedFunctions", (data) => {
+        const buttons = data.pinnedFunctions || [];
+        
+        if (buttons.length === 0) {
+          console.log("No pinned functions available for hotkey");
+          showHotkeyFeedback("Ctrl+1: No functions saved");
+          return;
+        }
+        
+        // Ctrl+1 triggers the oldest (first) saved function
+        const functionPath = buttons[0];
+        console.log("Hotkey Ctrl+1 triggered for oldest function:", functionPath);
+        
+        // Show a brief visual feedback
+        showHotkeyFeedback(`Ctrl+1: ${functionPath.split(" > ").pop()}`);
+        
+        // Trigger the function
+        triggerMenuPath(functionPath);
+      });
+    }
+  });
+}
+
+// Show visual feedback when a hotkey is pressed
+function showHotkeyFeedback(message) {
+  // Remove any existing feedback
+  const existingFeedback = document.getElementById('starbar-hotkey-feedback');
+  if (existingFeedback) {
+    existingFeedback.remove();
+  }
+  
+  // Create feedback element
+  const feedback = document.createElement('div');
+  feedback.id = 'starbar-hotkey-feedback';
+  feedback.textContent = message;
+  feedback.style.cssText = `
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    z-index: 10001;
+    pointer-events: none;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+  `;
+  
+  document.body.appendChild(feedback);
+  
+  // Fade out and remove after 2 seconds
+  setTimeout(() => {
+    feedback.style.opacity = '0';
+    setTimeout(() => {
+      if (feedback.parentNode) {
+        feedback.parentNode.removeChild(feedback);
+      }
+    }, 300);
+  }, 2000);
+}
+
 // Initialize when DOM is ready
 function init() {
   createToolbar();
@@ -1546,6 +1645,9 @@ function init() {
       currentMenuPath = [];
     }
   });
+  
+  // Add hotkey functionality for starBar functions
+  setupHotkeys();
   
   // Reset menu path when clicking outside menus
   document.addEventListener("click", (e) => {
