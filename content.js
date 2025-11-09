@@ -1,9 +1,39 @@
 // content.js
+
+// Prevent multiple script executions on the same page
+if (window.starfloInitialized) {
+  console.log("StarFlo content script already loaded, skipping...");
+  return;
+}
+window.starfloInitialized = true;
+console.log("StarFlo content script loading...");
+
 let lastTopMenu = null;
 let editingMode = false;
 let titleCollapsed = false;
 let currentMenuPath = [];
-let lastClickedColorButton = null; 
+let lastClickedColorButton = null;
+
+// Store observers for cleanup
+let menuObserver = null;
+let attributeObserver = null;
+let colorTrackingObserver = null;
+
+// Cleanup function to prevent memory leaks
+function cleanupObservers() {
+  if (menuObserver) {
+    menuObserver.disconnect();
+    menuObserver = null;
+  }
+  if (attributeObserver) {
+    attributeObserver.disconnect();
+    attributeObserver = null;
+  }
+  if (colorTrackingObserver) {
+    colorTrackingObserver.disconnect();
+    colorTrackingObserver = null;
+  }
+} 
 
 
 function isExtensionContextValid() {
@@ -1249,7 +1279,10 @@ function trackColorButtonClicks() {
 }
 
 function observeMenus() {
-  const observer = new MutationObserver((mutations) => {
+  // Clean up existing observers
+  cleanupObservers();
+  
+  menuObserver = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       for (const added of mutation.addedNodes) {
         if (!(added instanceof HTMLElement)) continue;
@@ -1264,7 +1297,7 @@ function observeMenus() {
   });
 
   
-  const attributeObserver = new MutationObserver((mutations) => {
+  attributeObserver = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       if (mutation.type === 'attributes' && 
           (mutation.attributeName === 'class' || mutation.attributeName === 'aria-selected')) {
@@ -1278,7 +1311,7 @@ function observeMenus() {
     }
   });
 
-  observer.observe(document.body, { childList: true, subtree: true });
+  menuObserver.observe(document.body, { childList: true, subtree: true });
   attributeObserver.observe(document.body, { 
     attributes: true, 
     subtree: true, 
@@ -1367,6 +1400,27 @@ function updateCurrentMenuPath() {
 }
 
 function createToolbar() {
+  // Check if toolbar already exists and remove it to prevent duplicates
+  const existingBar = document.getElementById("quickbar");
+  if (existingBar) {
+    console.log("Removing existing StarBar to prevent duplicates");
+    existingBar.remove();
+  }
+  
+  // Also check for any orphaned starbars without proper ID (safety net)
+  const orphanedBars = document.querySelectorAll('[alt="StarBar"]');
+  if (orphanedBars.length > 0) {
+    console.log(`Found ${orphanedBars.length} StarBar elements, cleaning up duplicates...`);
+  }
+  orphanedBars.forEach((orphan, index) => {
+    const parentBar = orphan.closest('div');
+    if (parentBar && parentBar.id !== 'quickbar') {
+      console.log(`Removing orphaned StarBar ${index + 1}`);
+      parentBar.remove();
+    }
+  });
+
+  console.log("Creating new StarBar...");
   const bar = document.createElement("div");
   bar.id = "quickbar";
   bar.style.position = "fixed";
@@ -1530,7 +1584,26 @@ function makeDraggable(handle, target) {
 }
 
 // Initialize when DOM is ready
+let isInitialized = false;
 function init() {
+  // Prevent multiple initializations
+  if (isInitialized) {
+    console.log("StarFlo already initialized, skipping...");
+    return;
+  }
+  
+  // Double-check that we're on a Google Sheets page
+  if (!window.location.href.includes('docs.google.com/spreadsheets')) {
+    console.log("Not on a Google Sheets page, skipping StarFlo initialization");
+    return;
+  }
+  
+  console.log("Initializing StarFlo...");
+  isInitialized = true;
+  
+  // Clean up any previous instances
+  cleanupObservers();
+  
   createToolbar();
   observeMenus();
 
@@ -1556,54 +1629,123 @@ function init() {
   });
 }
 
-window.addEventListener("load", init);
+// Initialize based on document ready state
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else if (document.readyState === "interactive" || document.readyState === "complete") {
+  // Document is already loaded
+  setTimeout(init, 100);
+} else {
+  // Fallback for older browsers
+  window.addEventListener("load", init);
+}
 
 // Re-initialize when page navigation occurs
 let lastUrl = location.href;
+let navigationTimeout = null;
+
 new MutationObserver(() => {
   const url = location.href;
   if (url !== lastUrl) {
     lastUrl = url;
-    setTimeout(init, 1000);
+    console.log("URL changed to:", url);
+    
+    // Clear any pending navigation timeout
+    if (navigationTimeout) {
+      clearTimeout(navigationTimeout);
+    }
+    
+    // Reset initialization flag for new page
+    isInitialized = false;
+    
+    // Also reset the global flag for new page navigation
+    window.starfloInitialized = false;
+    
+    // Debounce the initialization to prevent multiple rapid calls
+    navigationTimeout = setTimeout(() => {
+      console.log("Reinitializing after URL change...");
+      init();
+      navigationTimeout = null;
+    }, 1500); // Increased delay to ensure page is fully loaded
   }
 }).observe(document, {subtree: true, childList: true});
 
-// Also re-track color buttons when significant DOM changes occur
-let colorTrackingObserver = new MutationObserver((mutations) => {
-  let shouldRetrack = false;
-  
-  mutations.forEach(mutation => {
-    if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-      mutation.addedNodes.forEach(node => {
-        if (node.nodeType === 1) { // Element node
-          const text = (node.textContent || '').toLowerCase();
-          const label = (node.getAttribute && (node.getAttribute('aria-label') || node.getAttribute('data-tooltip') || '')).toLowerCase();
+// Start observing after initial load
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => {
+    setTimeout(() => {
+      if (!colorTrackingObserver) {
+        // Also re-track color buttons when significant DOM changes occur
+        colorTrackingObserver = new MutationObserver((mutations) => {
+          let shouldRetrack = false;
           
-          if (text.includes('color') || label.includes('color') || 
-              text.includes('fill') || label.includes('fill') ||
-              text.includes('text') || label.includes('text')) {
-            shouldRetrack = true;
+          mutations.forEach(mutation => {
+            if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+              mutation.addedNodes.forEach(node => {
+                if (node.nodeType === 1) { // Element node
+                  const text = (node.textContent || '').toLowerCase();
+                  const label = (node.getAttribute && (node.getAttribute('aria-label') || node.getAttribute('data-tooltip') || '')).toLowerCase();
+                  
+                  if (text.includes('color') || label.includes('color') || 
+                      text.includes('fill') || label.includes('fill') ||
+                      text.includes('text') || label.includes('text')) {
+                    shouldRetrack = true;
+                  }
+                }
+              });
+            }
+          });
+          
+          if (shouldRetrack) {
+            console.log("DOM changed, re-tracking color buttons...");
+            setTimeout(trackColorButtonClicks, 500);
           }
+        });
+
+        colorTrackingObserver.observe(document.body, {
+          childList: true,
+          subtree: true
+        });
+      }
+    }, 2000);
+  });
+} else {
+  setTimeout(() => {
+    if (!colorTrackingObserver) {
+      // Also re-track color buttons when significant DOM changes occur
+      colorTrackingObserver = new MutationObserver((mutations) => {
+        let shouldRetrack = false;
+        
+        mutations.forEach(mutation => {
+          if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+            mutation.addedNodes.forEach(node => {
+              if (node.nodeType === 1) { // Element node
+                const text = (node.textContent || '').toLowerCase();
+                const label = (node.getAttribute && (node.getAttribute('aria-label') || node.getAttribute('data-tooltip') || '')).toLowerCase();
+                
+                if (text.includes('color') || label.includes('color') || 
+                    text.includes('fill') || label.includes('fill') ||
+                    text.includes('text') || label.includes('text')) {
+                  shouldRetrack = true;
+                }
+              }
+            });
+          }
+        });
+        
+        if (shouldRetrack) {
+          console.log("DOM changed, re-tracking color buttons...");
+          setTimeout(trackColorButtonClicks, 500);
         }
       });
-    }
-  });
-  
-  if (shouldRetrack) {
-    console.log("DOM changed, re-tracking color buttons...");
-    setTimeout(trackColorButtonClicks, 500);
-  }
-});
 
-// Start observing after initial load
-window.addEventListener("load", () => {
-  setTimeout(() => {
-    colorTrackingObserver.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
+      colorTrackingObserver.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+    }
   }, 2000);
-});
+}
 
 window.addEventListener("contextmenu", (e) => {
   const target = e.target.closest("[aria-label], [title]");
