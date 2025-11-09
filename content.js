@@ -1214,7 +1214,7 @@ function getFullMenuPath(item) {
 
     // If we have multiple menus open and a tracked path, use it
     if (allVisibleMenus.length > 1) {
-      return [...currentMenuPath, label].join(" > ");
+return [...currentMenuPath, label].join(" > ");
     }
   }
 
@@ -1789,6 +1789,10 @@ function createToolbar() {
 
   // === Edit button ===
   const editButton = document.createElement("button");
+editButton.id = "starbar-edit-button";            // <— stable anchor for the tour
+editButton.setAttribute("aria-label", "Edit");    // improves query reliability
+editButton.title = "Edit";
+
   editButton.innerText = "✏️";
   editButton.style.border = "none";
   editButton.style.background = "transparent";
