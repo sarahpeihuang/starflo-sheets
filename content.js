@@ -1918,6 +1918,16 @@ function makeDraggable(handle, target) {
 
 // Initialize when DOM is ready
 function init() {
+ const currentUrl = window.location.href;
+  const isHomePage = currentUrl.match(/^https:\/\/docs\.google\.com\/spreadsheets\/(u\/\d+\/)?$/) ||
+                     currentUrl.match(/^https:\/\/docs\.google\.com\/spreadsheets\/(u\/\d+\/)?\?.*$/) ||
+                     currentUrl.match(/^https:\/\/docs\.google\.com\/spreadsheets\/(u\/\d+\/)?#.*$/) ||
+                     !currentUrl.includes('/d/'); // Any sheets URL without '/d/' is likely the home page
+  
+  if (isHomePage) {
+    console.log('StarFlo: Detected Google Sheets home page, not showing startbar');
+    return;}
+
   // Detect if this is a view-only sheet with retry mechanism
   const detectWithRetry = (attempt = 1, maxAttempts = 5) => {
     isViewOnlySheet = detectViewOnlySheet();
@@ -1992,6 +2002,10 @@ new MutationObserver(() => {
   const url = location.href;
   if (url !== lastUrl) {
     lastUrl = url;
+    const existingToolbar = document.getElementById('quickbar');
+    if (existingToolbar) {
+      existingToolbar.remove();
+    }
     // Reset view-only status for new page
     isViewOnlySheet = false;
     setTimeout(init, 1000);
