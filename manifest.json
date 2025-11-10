@@ -25,13 +25,16 @@
     "service_worker": "background.js"
   },
 
-  "content_scripts": [
-    {
-      "matches": ["https://docs.google.com/spreadsheets/*"],
-      "js": ["content.js"],
-      "css": ["styles.css"]
-    }
-  ],
+ "content_scripts": [
+  {
+    "matches": ["https://docs.google.com/spreadsheets/*"],
+    "js": ["intro.js", "onboarding.js", "content.js"],
+    "css": ["intro.css", "styles.css"]
+  }
+]
+,
+
+  
 
   "web_accessible_resources": [
     {
