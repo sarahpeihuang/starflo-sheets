@@ -2,7 +2,10 @@
 // StarBar Chrome Extension - Google Sheets productivity toolbar
 // Features:
 // - Pin frequently used functions to a floating toolbar
-// - Hotkey: Ctrl+1 triggers the oldest (first) saved function
+// - Hotkeys: 
+//   • Ctrl+Alt+Z/X/C (⌃⌥Z/X/C on Mac) for functions 1-3 [PRIMARY]
+//   • Alt+Shift+Z/X/C (⌥⇧Z/X/C on Mac) for functions 1-3 [FALLBACK]
+//   • Ctrl+1 triggers the oldest (first) saved function (legacy support)
 let lastTopMenu = null;
 let editingMode = false;
 let titleCollapsed = false;
@@ -214,7 +217,29 @@ function cleanText(text) {
 function triggerMenuPath(path) {
   console.log("=== TRIGGER MENU PATH ===");
   console.log("Full path:", path);
+  
+  // Close any existing menus first to ensure clean state
+  try {
+    // Press Escape to close any open menus/dialogs
+    document.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Escape',
+      code: 'Escape',
+      keyCode: 27,
+      which: 27,
+      bubbles: true
+    }));
+    
+    // Small delay to let menus close
+    setTimeout(() => {
+      executeMenuPath(path);
+    }, 100);
+  } catch (error) {
+    console.log("StarBar: Error closing menus, proceeding anyway:", error);
+    executeMenuPath(path);
+  }
+}
 
+function executeMenuPath(path) {
   const labels = path.split(" > ").map((l) => l.trim());
   const [first, ...rest] = labels;
 
@@ -1041,9 +1066,19 @@ function updateQuickbar() {
         iconImg.style.marginRight = "6px";
         iconImg.style.verticalAlign = "middle";
 
+        // Get hotkey display text (primary is Ctrl+Alt, fallback is Alt+Shift)
+        let hotkeyText = "";
+        if (index === 0) {
+          hotkeyText = navigator.platform.includes('Mac') ? "(⌃⌥Z)" : "(Ctrl+Alt+Z)";
+        } else if (index === 1) {
+          hotkeyText = navigator.platform.includes('Mac') ? "(⌃⌥X)" : "(Ctrl+Alt+X)";
+        } else if (index === 2) {
+          hotkeyText = navigator.platform.includes('Mac') ? "(⌃⌥C)" : "(Ctrl+Alt+C)";
+        }
+
         // Wrap text so icon and label align nicely
         const textWrapper = document.createElement("span");
-        textWrapper.innerHTML = btnText + (index === 0 ? `<span style="font-size: 10px; opacity: 0.7; margin-left: 4px;">(Ctrl+1)</span>` : '');
+        textWrapper.innerHTML = btnText + (hotkeyText ? `<span style="font-size: 10px; opacity: 0.7; margin-left: 4px;">${hotkeyText}</span>` : '');
         textWrapper.style.display = "flex";
         textWrapper.style.alignItems = "center";
         textWrapper.style.justifyContent = "center";
@@ -1064,7 +1099,16 @@ function updateQuickbar() {
         btn.appendChild(iconImg);
         btn.appendChild(textWrapper);
       } else {
-        btn.innerHTML = btnText + (index === 0 ? `<span style="font-size: 10px; opacity: 0.7; margin-left: 4px;">(Ctrl+1)</span>` : ''); // fallback for non-color buttons
+        // Get hotkey display text (primary is Ctrl+Alt, fallback is Alt+Shift)
+        let hotkeyText = "";
+        if (index === 0) {
+          hotkeyText = navigator.platform.includes('Mac') ? "(⌃⌥Z)" : "(Ctrl+Alt+Z)";
+        } else if (index === 1) {
+          hotkeyText = navigator.platform.includes('Mac') ? "(⌃⌥X)" : "(Ctrl+Alt+X)";
+        } else if (index === 2) {
+          hotkeyText = navigator.platform.includes('Mac') ? "(⌃⌥C)" : "(Ctrl+Alt+C)";
+        }
+        btn.innerHTML = btnText + (hotkeyText ? `<span style="font-size: 10px; opacity: 0.7; margin-left: 4px;">${hotkeyText}</span>` : ''); // fallback for non-color buttons
       }
       Object.assign(btn.style, {
         background: "#ffffff",
@@ -1082,11 +1126,20 @@ function updateQuickbar() {
       });
 
       // Add tooltip for hotkey information
+      let tooltipText = "";
       if (index === 0) {
-        btn.title = `Click or press Ctrl+1 to activate: ${btnText}`;
+        const hotkeyDisplay = navigator.platform.includes('Mac') ? "⌃⌥Z or ⌥⇧Z" : "Ctrl+Alt+Z or Alt+Shift+Z";
+        tooltipText = `Click or press ${hotkeyDisplay} to activate: ${btnText}`;
+      } else if (index === 1) {
+        const hotkeyDisplay = navigator.platform.includes('Mac') ? "⌃⌥X or ⌥⇧X" : "Ctrl+Alt+X or Alt+Shift+X";
+        tooltipText = `Click or press ${hotkeyDisplay} to activate: ${btnText}`;
+      } else if (index === 2) {
+        const hotkeyDisplay = navigator.platform.includes('Mac') ? "⌃⌥C or ⌥⇧C" : "Ctrl+Alt+C or Alt+Shift+C";
+        tooltipText = `Click or press ${hotkeyDisplay} to activate: ${btnText}`;
       } else {
-        btn.title = `Click to activate: ${btnText}`;
+        tooltipText = `Click to activate: ${btnText}`;
       }
+      btn.title = tooltipText;
 
       // Add hover effects
       if (!editingMode && !isViewOnlySheet) {
@@ -1932,44 +1985,216 @@ function makeDraggable(handle, target) {
 
 // Setup hotkey functionality for starBar functions
 function setupHotkeys() {
+  console.log("StarBar: Setting up hotkeys");
+  
+  // Use capture phase to intercept events before Google Sheets can handle them
   document.addEventListener("keydown", (e) => {
-    // Don't trigger hotkeys if user is typing in an input field
+    // Log all keydown events for debugging (only when modifier keys are involved)
+    if (e.altKey || e.shiftKey || e.ctrlKey || e.metaKey) {
+      console.log(`StarBar hotkey check: Key=${e.key}, Code=${e.code}, Alt=${e.altKey}, Shift=${e.shiftKey}, Ctrl=${e.ctrlKey}, Meta=${e.metaKey}`);
+      console.log(`StarBar active element:`, document.activeElement);
+      console.log(`StarBar active element tag:`, document.activeElement?.tagName);
+      console.log(`StarBar active element class:`, document.activeElement?.className);
+    }
+    
+    // More comprehensive check for input/editable elements in Google Sheets
     const activeElement = document.activeElement;
-    if (activeElement && (
+    const isInInputField = activeElement && (
       activeElement.tagName === 'INPUT' ||
       activeElement.tagName === 'TEXTAREA' ||
       activeElement.contentEditable === 'true' ||
-      activeElement.isContentEditable
-    )) {
+      activeElement.isContentEditable ||
+      // Google Sheets specific elements
+      activeElement.classList?.contains('cell-input') ||
+      activeElement.classList?.contains('waffle-name-box-input') ||
+      activeElement.id === 'waffle-name-box' ||
+      // Check if we're in formula bar
+      activeElement.closest('.docs-formula-bar') ||
+      // Check if we're in any Google Sheets input context
+      activeElement.closest('[contenteditable="true"]') ||
+      activeElement.closest('[role="textbox"]')
+    );
+    
+    if (isInInputField) {
+      console.log("StarBar: Hotkey ignored - typing in input field or Google Sheets editor");
       return;
     }
     
-    // Check for Ctrl+1 only
+    let isHotkeyPressed = false;
+    let functionIndex = -1;
+    let hotkeyDisplay = "";
+    
+    // Check for Ctrl+1 (original hotkey)
     if (e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey && e.key === '1') {
+      isHotkeyPressed = true;
+      functionIndex = 0;
+      hotkeyDisplay = "Ctrl+1";
+    }
+    
+    // Try Ctrl+Alt+Z/X/C as primary hotkeys (less likely to conflict)
+    const isCtrlAlt = (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey);
+    
+    if (isCtrlAlt) {
+      console.log(`StarBar: Ctrl+Alt detected with key: ${e.key}`);
+      switch (e.key.toLowerCase()) {
+        case 'z':
+          isHotkeyPressed = true;
+          functionIndex = 0;
+          hotkeyDisplay = navigator.platform.includes('Mac') ? "⌃⌥Z" : "Ctrl+Alt+Z";
+          break;
+        case 'x':
+          isHotkeyPressed = true;
+          functionIndex = 1;
+          hotkeyDisplay = navigator.platform.includes('Mac') ? "⌃⌥X" : "Ctrl+Alt+X";
+          break;
+        case 'c':
+          isHotkeyPressed = true;
+          functionIndex = 2;
+          hotkeyDisplay = navigator.platform.includes('Mac') ? "⌃⌥C" : "Ctrl+Alt+C";
+          break;
+      }
+    }
+    
+    // Fallback: Try Alt+Shift+Z/X/C (original requested hotkeys)
+    const isAltShift = (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey);
+    
+    if (isAltShift && !isHotkeyPressed) {
+      console.log(`StarBar: Alt+Shift detected with key: ${e.key}`);
+      switch (e.key.toLowerCase()) {
+        case 'z':
+          isHotkeyPressed = true;
+          functionIndex = 0;
+          hotkeyDisplay = navigator.platform.includes('Mac') ? "⌥⇧Z" : "Alt+Shift+Z";
+          break;
+        case 'x':
+          isHotkeyPressed = true;
+          functionIndex = 1;
+          hotkeyDisplay = navigator.platform.includes('Mac') ? "⌥⇧X" : "Alt+Shift+X";
+          break;
+        case 'c':
+          isHotkeyPressed = true;
+          functionIndex = 2;
+          hotkeyDisplay = navigator.platform.includes('Mac') ? "⌥⇧C" : "Alt+Shift+C";
+          break;
+      }
+    }
+    
+    // If a hotkey was pressed, handle it immediately
+    if (isHotkeyPressed) {
+      // Prevent default behavior and stop propagation more aggressively
       e.preventDefault();
       e.stopPropagation();
+      e.stopImmediatePropagation();
       
-      // Get the pinned functions
-      safeStorageGet("pinnedFunctions", (data) => {
-        const buttons = data.pinnedFunctions || [];
-        
-        if (buttons.length === 0) {
-          console.log("No pinned functions available for hotkey");
-          showHotkeyFeedback("Ctrl+1: No functions saved");
-          return;
+      console.log(`StarBar: Hotkey ${hotkeyDisplay} detected, executing immediately`);
+      
+      // Execute immediately without waiting for storage
+      executeHotkeyAction(functionIndex, hotkeyDisplay);
+      
+      return false; // Additional prevention
+    }
+  }, true); // Use capture phase to intercept before Google Sheets handles the event
+  
+  // Show a brief notification that hotkeys are ready
+  setTimeout(() => {
+    showHotkeyFeedback("StarBar hotkeys ready! Press Ctrl+Alt+Z/X/C");
+  }, 1000);
+}
+
+// Test function for debugging - can be called from browser console
+window.starBarTest = function(functionIndex = 0) {
+  console.log(`StarBar Test: Manually triggering function ${functionIndex + 1}`);
+  
+  safeStorageGet("pinnedFunctions", (data) => {
+    const buttons = data.pinnedFunctions || [];
+    console.log(`StarBar Test: Found ${buttons.length} pinned functions:`, buttons);
+    
+    if (buttons.length === 0) {
+      console.log("StarBar Test: No pinned functions available");
+      showHotkeyFeedback("Test: No functions saved");
+      return;
+    }
+    
+    if (functionIndex >= buttons.length) {
+      console.log(`StarBar Test: Function ${functionIndex + 1} not available, only ${buttons.length} functions saved`);
+      showHotkeyFeedback(`Test: Function ${functionIndex + 1} not available`);
+      return;
+    }
+    
+    const functionPath = buttons[functionIndex];
+    console.log(`StarBar Test: Triggering function ${functionIndex + 1}:`, functionPath);
+    
+    showHotkeyFeedback(`Test: ${functionPath.split(" > ").pop()}`);
+    triggerMenuPath(functionPath);
+  });
+};
+
+// Alternative hotkey system using document.addEventListener with different options
+function setupAlternativeHotkeys() {
+  console.log("StarBar: Setting up alternative hotkey system");
+  
+  // Add event listener to window as well as document
+  const handleKeyEvent = (e) => {
+    if (e.altKey || e.shiftKey || e.ctrlKey || e.metaKey) {
+      console.log(`StarBar ALT hotkey: Key=${e.key}, Alt=${e.altKey}, Shift=${e.shiftKey}, Ctrl=${e.ctrlKey}`);
+      
+      // Try Ctrl+Alt combinations first
+      if (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey) {
+        let functionIndex = -1;
+        switch (e.key.toLowerCase()) {
+          case 'z': functionIndex = 0; break;
+          case 'x': functionIndex = 1; break;
+          case 'c': functionIndex = 2; break;
         }
         
-        // Ctrl+1 triggers the oldest (first) saved function
-        const functionPath = buttons[0];
-        console.log("Hotkey Ctrl+1 triggered for oldest function:", functionPath);
-        
-        // Show a brief visual feedback
-        showHotkeyFeedback(`Ctrl+1: ${functionPath.split(" > ").pop()}`);
-        
-        // Trigger the function
-        triggerMenuPath(functionPath);
-      });
+        if (functionIndex >= 0) {
+          console.log(`StarBar ALT: Ctrl+Alt+${e.key.toUpperCase()} detected`);
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          
+          const hotkeyDisplay = `Ctrl+Alt+${e.key.toUpperCase()}`;
+          executeHotkeyAction(functionIndex, hotkeyDisplay);
+          return false;
+        }
+      }
     }
+  };
+  
+  // Add to both window and document with different phases
+  window.addEventListener('keydown', handleKeyEvent, true);
+  document.body.addEventListener('keydown', handleKeyEvent, true);
+}
+function executeHotkeyAction(functionIndex, hotkeyDisplay) {
+  console.log(`StarBar: Executing hotkey action for function ${functionIndex + 1}`);
+  
+  // Get the pinned functions
+  safeStorageGet("pinnedFunctions", (data) => {
+    const buttons = data.pinnedFunctions || [];
+    console.log(`StarBar: Found ${buttons.length} pinned functions:`, buttons);
+    
+    if (buttons.length === 0) {
+      console.log("StarBar: No pinned functions available for hotkey");
+      showHotkeyFeedback(`${hotkeyDisplay}: No functions saved`);
+      return;
+    }
+    
+    if (functionIndex >= buttons.length) {
+      console.log(`StarBar: Function ${functionIndex + 1} not available, only ${buttons.length} functions saved`);
+      showHotkeyFeedback(`${hotkeyDisplay}: Function ${functionIndex + 1} not available`);
+      return;
+    }
+    
+    const functionPath = buttons[functionIndex];
+    console.log(`StarBar: Hotkey ${hotkeyDisplay} triggered for function ${functionIndex + 1}:`, functionPath);
+    
+    // Show a brief visual feedback
+    showHotkeyFeedback(`${hotkeyDisplay}: ${functionPath.split(" > ").pop()}`);
+    
+    // Trigger the function with a slight delay to ensure UI is ready
+    setTimeout(() => {
+      triggerMenuPath(functionPath);
+    }, 50);
   });
 }
 
@@ -2086,6 +2311,9 @@ function init() {
   
   // Add hotkey functionality for starBar functions
   setupHotkeys();
+  
+  // Also setup alternative hotkey system as backup
+  setupAlternativeHotkeys();
   
   // Reset menu path when clicking outside menus
   document.addEventListener("click", (e) => {
