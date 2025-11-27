@@ -2163,19 +2163,16 @@ function setupAlternativeHotkeys() {
           case 'c': functionIndex = 2; break;
         }
 
-        if (functionIndex >= 0) {
-          const hotkeyDisplay = isMac
-            ? `⌘⌥${e.key.toUpperCase()}`
-            : `Ctrl+Alt+${e.key.toUpperCase()}`;
+         if (functionIndex >= 0) {
+    const hotkeyDisplay = `Ctrl+Alt+${e.key.toUpperCase()}`;
+    console.log(`StarBar ALT: ${hotkeyDisplay} detected`);
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
 
-          console.log(`StarBar ALT: ${hotkeyDisplay} detected`);
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-
-          executeHotkeyAction(functionIndex, hotkeyDisplay);
-          return false;
-        }
+    executeHotkeyAction(functionIndex, hotkeyDisplay);
+    return false;
+  }
       }
     }
   };
