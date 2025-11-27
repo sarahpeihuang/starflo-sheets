@@ -2031,30 +2031,36 @@ function setupHotkeys() {
       hotkeyDisplay = "Ctrl+1";
     }
     
-    // Try Ctrl+Alt+Z/X/C as primary hotkeys (less likely to conflict)
-    const isCtrlAlt = (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey);
-    
-    if (isCtrlAlt) {
-      console.log(`StarBar: Ctrl+Alt detected with key: ${e.key}`);
-      switch (e.key.toLowerCase()) {
-        case 'z':
-          isHotkeyPressed = true;
-          functionIndex = 0;
-          hotkeyDisplay = navigator.platform.includes('Mac') ? "⌃⌥Z" : "Ctrl+Alt+Z";
-          break;
-        case 'x':
-          isHotkeyPressed = true;
-          functionIndex = 1;
-          hotkeyDisplay = navigator.platform.includes('Mac') ? "⌃⌥X" : "Ctrl+Alt+X";
-          break;
-        case 'c':
-          isHotkeyPressed = true;
-          functionIndex = 2;
-          hotkeyDisplay = navigator.platform.includes('Mac') ? "⌃⌥C" : "Ctrl+Alt+C";
-          break;
-      }
-    }
-    
+    // Platform-aware primary hotkeys:
+// - Mac: ⌘ + ⌥ + Z/X/C
+// - Others: Ctrl + Alt + Z/X/C
+const isMac = navigator.platform.includes('Mac');
+
+const isPrimaryCombo = isMac
+  ? (e.metaKey && e.altKey && !e.ctrlKey && !e.shiftKey) // ⌘ + ⌥ on Mac
+  : (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey); // Ctrl + Alt elsewhere
+
+if (isPrimaryCombo) {
+  console.log(`StarBar: Primary hotkey detected with key: ${e.key} on ${isMac ? 'Mac' : 'non-Mac'}`);
+  switch (e.key.toLowerCase()) {
+    case 'z':
+      isHotkeyPressed = true;
+      functionIndex = 0;
+      hotkeyDisplay = isMac ? "⌘⌥Z" : "Ctrl+Alt+Z";
+      break;
+    case 'x':
+      isHotkeyPressed = true;
+      functionIndex = 1;
+      hotkeyDisplay = isMac ? "⌘⌥X" : "Ctrl+Alt+X";
+      break;
+    case 'c':
+      isHotkeyPressed = true;
+      functionIndex = 2;
+      hotkeyDisplay = isMac ? "⌘⌥C" : "Ctrl+Alt+C";
+      break;
+  }
+}
+
     // Fallback: Try Alt+Shift+Z/X/C (original requested hotkeys)
     const isAltShift = (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey);
     
@@ -2097,8 +2103,13 @@ function setupHotkeys() {
   
   // Show a brief notification that hotkeys are ready
   setTimeout(() => {
-    showHotkeyFeedback("StarBar hotkeys ready! Press Ctrl+Alt+Z/X/C");
-  }, 1000);
+  const isMac = navigator.platform.includes('Mac');
+  const msg = isMac
+    ? "StarBar hotkeys ready! Press ⌘⌥Z/X/C"
+    : "StarBar hotkeys ready! Press Ctrl+Alt+Z/X/C";
+  showHotkeyFeedback(msg);
+}, 1000);
+
 }
 
 // Test function for debugging - can be called from browser console
@@ -2133,27 +2144,35 @@ window.starBarTest = function(functionIndex = 0) {
 function setupAlternativeHotkeys() {
   console.log("StarBar: Setting up alternative hotkey system");
   
-  // Add event listener to window as well as document
   const handleKeyEvent = (e) => {
     if (e.altKey || e.shiftKey || e.ctrlKey || e.metaKey) {
-      console.log(`StarBar ALT hotkey: Key=${e.key}, Alt=${e.altKey}, Shift=${e.shiftKey}, Ctrl=${e.ctrlKey}`);
+      console.log(`StarBar ALT hotkey: Key=${e.key}, Alt=${e.altKey}, Shift=${e.shiftKey}, Ctrl=${e.ctrlKey}, Meta=${e.metaKey}`);
       
-      // Try Ctrl+Alt combinations first
-      if (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey) {
+      const isMac = navigator.platform.includes('Mac');
+
+      // Primary combo (same logic as setupHotkeys)
+      const isPrimaryCombo = isMac
+        ? (e.metaKey && e.altKey && !e.ctrlKey && !e.shiftKey)   // ⌘ + ⌥
+        : (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey); // Ctrl + Alt
+
+      if (isPrimaryCombo) {
         let functionIndex = -1;
         switch (e.key.toLowerCase()) {
           case 'z': functionIndex = 0; break;
           case 'x': functionIndex = 1; break;
           case 'c': functionIndex = 2; break;
         }
-        
+
         if (functionIndex >= 0) {
-          console.log(`StarBar ALT: Ctrl+Alt+${e.key.toUpperCase()} detected`);
+          const hotkeyDisplay = isMac
+            ? `⌘⌥${e.key.toUpperCase()}`
+            : `Ctrl+Alt+${e.key.toUpperCase()}`;
+
+          console.log(`StarBar ALT: ${hotkeyDisplay} detected`);
           e.preventDefault();
           e.stopPropagation();
           e.stopImmediatePropagation();
-          
-          const hotkeyDisplay = `Ctrl+Alt+${e.key.toUpperCase()}`;
+
           executeHotkeyAction(functionIndex, hotkeyDisplay);
           return false;
         }
@@ -2161,10 +2180,11 @@ function setupAlternativeHotkeys() {
     }
   };
   
-  // Add to both window and document with different phases
   window.addEventListener('keydown', handleKeyEvent, true);
   document.body.addEventListener('keydown', handleKeyEvent, true);
 }
+
+
 function executeHotkeyAction(functionIndex, hotkeyDisplay) {
   console.log(`StarBar: Executing hotkey action for function ${functionIndex + 1}`);
   
