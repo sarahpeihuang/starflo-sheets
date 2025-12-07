@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "StarFlo",
-  "version": "1.11",
+  "version": "1.12",
   "description": "Pin and access your favorite Google Sheets functions instantly.",
   "permissions": ["storage", "scripting", "activeTab", "contextMenus"],
   "host_permissions": ["https://docs.google.com/spreadsheets/*"],
@@ -25,16 +25,13 @@
     "service_worker": "background.js"
   },
 
- "content_scripts": [
-  {
-    "matches": ["https://docs.google.com/spreadsheets/*"],
-    "js": ["intro.js", "onboarding.js", "content.js"],
-    "css": ["intro.css", "styles.css"]
-  }
-]
-,
-
-  
+  "content_scripts": [
+    {
+      "matches": ["https://docs.google.com/spreadsheets/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"]
+    }
+  ],
 
   "web_accessible_resources": [
     {
