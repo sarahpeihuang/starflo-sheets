@@ -1671,7 +1671,10 @@ function trackColorButtonClicks() {
 }
 
 function observeMenus() {
-  const observer = new MutationObserver((mutations) => {
+  // Clean up existing observers
+  cleanupObservers();
+  
+  menuObserver = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       for (const added of mutation.addedNodes) {
         if (!(added instanceof HTMLElement)) continue;
@@ -1797,6 +1800,27 @@ function updateCurrentMenuPath() {
 }
 
 function createToolbar() {
+  // Check if toolbar already exists and remove it to prevent duplicates
+  const existingBar = document.getElementById("quickbar");
+  if (existingBar) {
+    console.log("Removing existing StarBar to prevent duplicates");
+    existingBar.remove();
+  }
+  
+  // Also check for any orphaned starbars without proper ID (safety net)
+  const orphanedBars = document.querySelectorAll('[alt="StarBar"]');
+  if (orphanedBars.length > 0) {
+    console.log(`Found ${orphanedBars.length} StarBar elements, cleaning up duplicates...`);
+  }
+  orphanedBars.forEach((orphan, index) => {
+    const parentBar = orphan.closest('div');
+    if (parentBar && parentBar.id !== 'quickbar') {
+      console.log(`Removing orphaned StarBar ${index + 1}`);
+      parentBar.remove();
+    }
+  });
+
+  console.log("Creating new StarBar...");
   const bar = document.createElement("div");
   bar.id = "quickbar";
   bar.style.position = "fixed";
@@ -2241,6 +2265,7 @@ function showHotkeyFeedback(message) {
 }
 
 // Initialize when DOM is ready
+let isInitialized = false;
 function init() {
  const currentUrl = window.location.href;
   const isHomePage = currentUrl.match(/^https:\/\/docs\.google\.com\/spreadsheets\/(u\/\d+\/)?$/) ||
@@ -2324,10 +2349,21 @@ function init() {
   });
 }
 
-window.addEventListener("load", init);
+// Initialize based on document ready state
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else if (document.readyState === "interactive" || document.readyState === "complete") {
+  // Document is already loaded
+  setTimeout(init, 100);
+} else {
+  // Fallback for older browsers
+  window.addEventListener("load", init);
+}
 
 // Re-initialize when page navigation occurs
 let lastUrl = location.href;
+let navigationTimeout = null;
+
 new MutationObserver(() => {
   const url = location.href;
   if (url !== lastUrl) {
