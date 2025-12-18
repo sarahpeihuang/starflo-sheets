@@ -3,8 +3,8 @@
 // Features:
 // - Pin frequently used functions to a floating toolbar
 // - Hotkeys: 
-//   • Ctrl+Alt+Z/X/C (⌃⌥Z/X/C on Mac) for functions 1-3 [PRIMARY]
-//   • Alt+Shift+Z/X/C (⌥⇧Z/X/C on Mac) for functions 1-3 [FALLBACK]
+//   • Ctrl+Alt+Z/X/S (Win/Linux) / Cmd+Option+Z/X/S (Mac) for functions 1-3 [PRIMARY]
+//   • Alt+Shift+Z/X/S (⌥⇧Z/X/S on Mac) for functions 1-3 [FALLBACK]
 //   • Ctrl+1 triggers the oldest (first) saved function (legacy support)
 let lastTopMenu = null;
 let editingMode = false;
@@ -1066,14 +1066,14 @@ function updateQuickbar() {
         iconImg.style.marginRight = "6px";
         iconImg.style.verticalAlign = "middle";
 
-        // Get hotkey display text (primary is Ctrl+Alt, fallback is Alt+Shift)
+        // Get hotkey display text (primary is Ctrl+Alt on Win/Linux, Cmd+Option on Mac, fallback is Alt+Shift)
         let hotkeyText = "";
         if (index === 0) {
-          hotkeyText = navigator.platform.includes('Mac') ? "(⌃⌥Z)" : "(Ctrl+Alt+Z)";
+          hotkeyText = navigator.platform.includes('Mac') ? "(⌘⌥Z)" : "(Ctrl+Alt+Z)";
         } else if (index === 1) {
-          hotkeyText = navigator.platform.includes('Mac') ? "(⌃⌥X)" : "(Ctrl+Alt+X)";
+          hotkeyText = navigator.platform.includes('Mac') ? "(⌘⌥X)" : "(Ctrl+Alt+X)";
         } else if (index === 2) {
-          hotkeyText = navigator.platform.includes('Mac') ? "(⌃⌥C)" : "(Ctrl+Alt+C)";
+          hotkeyText = navigator.platform.includes('Mac') ? "(⌘⌥S)" : "(Ctrl+Alt+S)";
         }
 
         // Wrap text so icon and label align nicely
@@ -1102,11 +1102,11 @@ function updateQuickbar() {
         // Get hotkey display text (primary is Ctrl+Alt, fallback is Alt+Shift)
         let hotkeyText = "";
         if (index === 0) {
-          hotkeyText = navigator.platform.includes('Mac') ? "(⌃⌥Z)" : "(Ctrl+Alt+Z)";
+          hotkeyText = navigator.platform.includes('Mac') ? "(⌘⌥Z)" : "(Ctrl+Alt+Z)";
         } else if (index === 1) {
-          hotkeyText = navigator.platform.includes('Mac') ? "(⌃⌥X)" : "(Ctrl+Alt+X)";
+          hotkeyText = navigator.platform.includes('Mac') ? "(⌘⌥X)" : "(Ctrl+Alt+X)";
         } else if (index === 2) {
-          hotkeyText = navigator.platform.includes('Mac') ? "(⌃⌥C)" : "(Ctrl+Alt+C)";
+          hotkeyText = navigator.platform.includes('Mac') ? "(⌘⌥S)" : "(Ctrl+Alt+S)";
         }
         btn.innerHTML = btnText + (hotkeyText ? `<span style="font-size: 10px; opacity: 0.7; margin-left: 4px;">${hotkeyText}</span>` : ''); // fallback for non-color buttons
       }
@@ -1128,13 +1128,13 @@ function updateQuickbar() {
       // Add tooltip for hotkey information
       let tooltipText = "";
       if (index === 0) {
-        const hotkeyDisplay = navigator.platform.includes('Mac') ? "⌃⌥Z or ⌥⇧Z" : "Ctrl+Alt+Z or Alt+Shift+Z";
+        const hotkeyDisplay = navigator.platform.includes('Mac') ? "⌘⌥Z or ⌥⇧Z" : "Ctrl+Alt+Z or Alt+Shift+Z";
         tooltipText = `Click or press ${hotkeyDisplay} to activate: ${btnText}`;
       } else if (index === 1) {
-        const hotkeyDisplay = navigator.platform.includes('Mac') ? "⌃⌥X or ⌥⇧X" : "Ctrl+Alt+X or Alt+Shift+X";
+        const hotkeyDisplay = navigator.platform.includes('Mac') ? "⌘⌥X or ⌥⇧X" : "Ctrl+Alt+X or Alt+Shift+X";
         tooltipText = `Click or press ${hotkeyDisplay} to activate: ${btnText}`;
       } else if (index === 2) {
-        const hotkeyDisplay = navigator.platform.includes('Mac') ? "⌃⌥C or ⌥⇧C" : "Ctrl+Alt+C or Alt+Shift+C";
+        const hotkeyDisplay = navigator.platform.includes('Mac') ? "⌘⌥S or ⌥⇧S" : "Ctrl+Alt+S or Alt+Shift+S";
         tooltipText = `Click or press ${hotkeyDisplay} to activate: ${btnText}`;
       } else {
         tooltipText = `Click to activate: ${btnText}`;
@@ -2055,31 +2055,34 @@ function setupHotkeys() {
       hotkeyDisplay = "Ctrl+1";
     }
     
-    // Try Ctrl+Alt+Z/X/C as primary hotkeys (less likely to conflict)
-    const isCtrlAlt = (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey);
+    // Try Ctrl+Alt+Z/X/S as primary hotkeys on Windows/Linux, Cmd+Option+Z/X/S on Mac
+    const isMac = navigator.platform.includes('Mac');
+    const isPrimaryHotkey = isMac ? 
+      (e.metaKey && e.altKey && !e.shiftKey && !e.ctrlKey) : 
+      (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey);
     
-    if (isCtrlAlt) {
-      console.log(`StarBar: Ctrl+Alt detected with key: ${e.key}`);
+    if (isPrimaryHotkey) {
+      console.log(`StarBar: Primary hotkey detected with key: ${e.key}`);
       switch (e.key.toLowerCase()) {
         case 'z':
           isHotkeyPressed = true;
           functionIndex = 0;
-          hotkeyDisplay = navigator.platform.includes('Mac') ? "⌃⌥Z" : "Ctrl+Alt+Z";
+          hotkeyDisplay = isMac ? "⌘⌥Z" : "Ctrl+Alt+Z";
           break;
         case 'x':
           isHotkeyPressed = true;
           functionIndex = 1;
-          hotkeyDisplay = navigator.platform.includes('Mac') ? "⌃⌥X" : "Ctrl+Alt+X";
+          hotkeyDisplay = isMac ? "⌘⌥X" : "Ctrl+Alt+X";
           break;
-        case 'c':
+        case 's':
           isHotkeyPressed = true;
           functionIndex = 2;
-          hotkeyDisplay = navigator.platform.includes('Mac') ? "⌃⌥C" : "Ctrl+Alt+C";
+          hotkeyDisplay = isMac ? "⌘⌥S" : "Ctrl+Alt+S";
           break;
       }
     }
     
-    // Fallback: Try Alt+Shift+Z/X/C (original requested hotkeys)
+    // Fallback: Try Alt+Shift+Z/X/S (original requested hotkeys)
     const isAltShift = (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey);
     
     if (isAltShift && !isHotkeyPressed) {
@@ -2095,10 +2098,10 @@ function setupHotkeys() {
           functionIndex = 1;
           hotkeyDisplay = navigator.platform.includes('Mac') ? "⌥⇧X" : "Alt+Shift+X";
           break;
-        case 'c':
+        case 's':
           isHotkeyPressed = true;
           functionIndex = 2;
-          hotkeyDisplay = navigator.platform.includes('Mac') ? "⌥⇧C" : "Alt+Shift+C";
+          hotkeyDisplay = navigator.platform.includes('Mac') ? "⌥⇧S" : "Alt+Shift+S";
           break;
       }
     }
@@ -2121,7 +2124,9 @@ function setupHotkeys() {
   
   // Show a brief notification that hotkeys are ready
   setTimeout(() => {
-    showHotkeyFeedback("StarBar hotkeys ready! Press Ctrl+Alt+Z/X/C");
+    const isMac = navigator.platform.includes('Mac');
+    const hotkeyText = isMac ? "⌘⌥Z/X/S" : "Ctrl+Alt+Z/X/S";
+    showHotkeyFeedback(`StarBar hotkeys ready! Press ${hotkeyText}`);
   }, 1000);
 }
 
@@ -2160,24 +2165,31 @@ function setupAlternativeHotkeys() {
   // Add event listener to window as well as document
   const handleKeyEvent = (e) => {
     if (e.altKey || e.shiftKey || e.ctrlKey || e.metaKey) {
-      console.log(`StarBar ALT hotkey: Key=${e.key}, Alt=${e.altKey}, Shift=${e.shiftKey}, Ctrl=${e.ctrlKey}`);
+      console.log(`StarBar ALT hotkey: Key=${e.key}, Alt=${e.altKey}, Shift=${e.shiftKey}, Ctrl=${e.ctrlKey}, Meta=${e.metaKey}`);
       
-      // Try Ctrl+Alt combinations first
-      if (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey) {
+      // Check for primary hotkeys - Ctrl+Alt on Win/Linux, Cmd+Option on Mac
+      const isMac = navigator.platform.includes('Mac');
+      const isPrimaryHotkey = isMac ? 
+        (e.metaKey && e.altKey && !e.shiftKey && !e.ctrlKey) : 
+        (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey);
+      
+      if (isPrimaryHotkey) {
         let functionIndex = -1;
         switch (e.key.toLowerCase()) {
           case 'z': functionIndex = 0; break;
           case 'x': functionIndex = 1; break;
-          case 'c': functionIndex = 2; break;
+          case 's': functionIndex = 2; break;
         }
         
         if (functionIndex >= 0) {
-          console.log(`StarBar ALT: Ctrl+Alt+${e.key.toUpperCase()} detected`);
+          console.log(`StarBar ALT: Primary hotkey ${e.key.toUpperCase()} detected`);
           e.preventDefault();
           e.stopPropagation();
           e.stopImmediatePropagation();
           
-          const hotkeyDisplay = `Ctrl+Alt+${e.key.toUpperCase()}`;
+          const hotkeyDisplay = isMac ? 
+            `⌘⌥${e.key.toUpperCase()}` : 
+            `Ctrl+Alt+${e.key.toUpperCase()}`;
           executeHotkeyAction(functionIndex, hotkeyDisplay);
           return false;
         }
