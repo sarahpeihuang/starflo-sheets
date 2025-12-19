@@ -6,12 +6,20 @@
 //   • Ctrl+Alt+Z/X/S (Win/Linux) / Cmd+Option+Z/X/S (Mac) for functions 1-3 [PRIMARY]
 //   • Alt+Shift+Z/X/S (⌥⇧Z/X/S on Mac) for functions 1-3 [FALLBACK]
 //   • Ctrl+1 triggers the oldest (first) saved function (legacy support)
+
+// Utility function for robust Mac detection
+function isMacPlatform() {
+  return navigator.platform.includes('Mac') || navigator.userAgent.includes('Mac');
+}
+
 let lastTopMenu = null;
 let editingMode = false;
 let titleCollapsed = false;
 let currentMenuPath = [];
 let lastClickedColorButton = null;
-let isViewOnlySheet = false; 
+let isViewOnlySheet = false;
+let menuObserver = null;
+let attributeObserver = null; 
 
 
 function isExtensionContextValid() {
@@ -1099,7 +1107,16 @@ function updateQuickbar() {
         btn.appendChild(iconImg);
         btn.appendChild(textWrapper);
       } else {
-        // Get hotkey display text (primary is Ctrl+Alt, fallback is Alt+Shift)
+        // Add star icon for non-color functions
+        const starIcon = document.createElement("img");
+        starIcon.src = safeGetURL("star-default.svg");
+        starIcon.alt = "";
+        starIcon.style.width = "16px";
+        starIcon.style.height = "16px";
+        starIcon.style.marginRight = "6px";
+        starIcon.style.flexShrink = "0";
+
+        // Get hotkey display text (primary is Ctrl+Alt on Win/Linux, Cmd+Option on Mac, fallback is Alt+Shift)
         let hotkeyText = "";
         if (index === 0) {
           hotkeyText = navigator.platform.includes('Mac') ? "(⌘⌥Z)" : "(Ctrl+Alt+Z)";
@@ -1108,7 +1125,20 @@ function updateQuickbar() {
         } else if (index === 2) {
           hotkeyText = navigator.platform.includes('Mac') ? "(⌘⌥S)" : "(Ctrl+Alt+S)";
         }
-        btn.innerHTML = btnText + (hotkeyText ? `<span style="font-size: 10px; opacity: 0.7; margin-left: 4px;">${hotkeyText}</span>` : ''); // fallback for non-color buttons
+
+        // Create text wrapper for consistent layout
+        const textWrapper = document.createElement("span");
+        textWrapper.innerHTML = btnText + (hotkeyText ? `<span style="font-size: 10px; opacity: 0.7; margin-left: 4px;">${hotkeyText}</span>` : '');
+        textWrapper.style.flexGrow = "1";
+        textWrapper.style.textAlign = "center";
+
+        btn.innerHTML = "";
+        btn.style.display = "flex";
+        btn.style.alignItems = "center";
+        btn.style.justifyContent = "flex-start";
+
+        btn.appendChild(starIcon);
+        btn.appendChild(textWrapper);
       }
       Object.assign(btn.style, {
         background: "#ffffff",
@@ -1670,6 +1700,17 @@ function trackColorButtonClicks() {
   console.log("Tracked", trackedCount, "color-related buttons");
 }
 
+function cleanupObservers() {
+  if (menuObserver) {
+    menuObserver.disconnect();
+    menuObserver = null;
+  }
+  if (attributeObserver) {
+    attributeObserver.disconnect();
+    attributeObserver = null;
+  }
+}
+
 function observeMenus() {
   // Clean up existing observers
   cleanupObservers();
@@ -1688,7 +1729,7 @@ function observeMenus() {
     }
   });
 
-  const attributeObserver = new MutationObserver((mutations) => {
+  attributeObserver = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       if (
         mutation.type === "attributes" &&
@@ -1707,7 +1748,7 @@ function observeMenus() {
     }
   });
 
-  observer.observe(document.body, { childList: true, subtree: true });
+  menuObserver.observe(document.body, { childList: true, subtree: true });
   attributeObserver.observe(document.body, {
     attributes: true,
     subtree: true,
@@ -2011,14 +2052,23 @@ function makeDraggable(handle, target) {
 function setupHotkeys() {
   console.log("StarBar: Setting up hotkeys");
   
+  // Mac detection - declare once at function scope
+  const isMac = isMacPlatform();
+  console.log(`StarBar: Platform detected as Mac: ${isMac}`);
+  
   // Use capture phase to intercept events before Google Sheets can handle them
   document.addEventListener("keydown", (e) => {
     // Log all keydown events for debugging (only when modifier keys are involved)
     if (e.altKey || e.shiftKey || e.ctrlKey || e.metaKey) {
-      console.log(`StarBar hotkey check: Key=${e.key}, Code=${e.code}, Alt=${e.altKey}, Shift=${e.shiftKey}, Ctrl=${e.ctrlKey}, Meta=${e.metaKey}`);
+      console.log(`StarBar hotkey check: Key=${e.key}, Code=${e.code}, Alt=${e.altKey}, Shift=${e.shiftKey}, Ctrl=${e.ctrlKey}, Meta=${e.metaKey}, Platform=${navigator.platform}, IsMac=${isMac}`);
       console.log(`StarBar active element:`, document.activeElement);
       console.log(`StarBar active element tag:`, document.activeElement?.tagName);
       console.log(`StarBar active element class:`, document.activeElement?.className);
+      
+      // Mac-specific debugging for Command+Option combinations
+      if (isMac && e.metaKey && e.altKey) {
+        console.log(`StarBar: Mac Command+Option detected with key: ${e.key}, preventDefault will be called`);
+      }
     }
     
     // More comprehensive check for input/editable elements in Google Sheets
@@ -2056,7 +2106,6 @@ function setupHotkeys() {
     }
     
     // Try Ctrl+Alt+Z/X/S as primary hotkeys on Windows/Linux, Cmd+Option+Z/X/S on Mac
-    const isMac = navigator.platform.includes('Mac');
     const isPrimaryHotkey = isMac ? 
       (e.metaKey && e.altKey && !e.shiftKey && !e.ctrlKey) : 
       (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey);
@@ -2108,12 +2157,20 @@ function setupHotkeys() {
     
     // If a hotkey was pressed, handle it immediately
     if (isHotkeyPressed) {
-      // Prevent default behavior and stop propagation more aggressively
+      // More aggressive prevention for Mac to override system shortcuts
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
       
-      console.log(`StarBar: Hotkey ${hotkeyDisplay} detected, executing immediately`);
+      // Additional Mac-specific prevention
+      if (isMac) {
+        // Try to prevent any default Mac behavior
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+      }
+      
+      console.log(`StarBar: Hotkey ${hotkeyDisplay} detected, executing immediately (Mac: ${isMac})`);
       
       // Execute immediately without waiting for storage
       executeHotkeyAction(functionIndex, hotkeyDisplay);
@@ -2124,11 +2181,36 @@ function setupHotkeys() {
   
   // Show a brief notification that hotkeys are ready
   setTimeout(() => {
-    const isMac = navigator.platform.includes('Mac');
     const hotkeyText = isMac ? "⌘⌥Z/X/S" : "Ctrl+Alt+Z/X/S";
     showHotkeyFeedback(`StarBar hotkeys ready! Press ${hotkeyText}`);
   }, 1000);
 }
+
+// Mac hotkey test function - can be called from browser console
+window.starBarMacTest = function() {
+  const isMac = isMacPlatform();
+  console.log(`StarBar Mac Test: Running on Mac: ${isMac}`);
+  console.log(`StarBar Mac Test: Platform: ${navigator.platform}`);
+  console.log(`StarBar Mac Test: UserAgent: ${navigator.userAgent}`);
+  
+  if (!isMac) {
+    console.log("StarBar Mac Test: Not running on Mac, test not applicable");
+    showHotkeyFeedback("Test: Not on Mac platform");
+    return;
+  }
+  
+  console.log("StarBar Mac Test: Mac detected, hotkeys should work with:");
+  console.log("- Command+Option+Z/X/S (primary)");
+  console.log("- Option+Shift+Z/X/S (fallback)");
+  
+  showHotkeyFeedback("Mac Test: Ready! Try ⌘⌥Z/X/S");
+  
+  return {
+    isMac: isMac,
+    platform: navigator.platform,
+    userAgent: navigator.userAgent
+  };
+};
 
 // Test function for debugging - can be called from browser console
 window.starBarTest = function(functionIndex = 0) {
