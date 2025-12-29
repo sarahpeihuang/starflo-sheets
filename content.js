@@ -7,8 +7,15 @@
 //   • Alt+Shift+Z/X/S (⌥⇧Z/X/S on Mac) for functions 1-3 [FALLBACK]
 //   • Ctrl+1 triggers the oldest (first) saved function (legacy support)
 
+// DEBUG: Set to true to simulate Mac on Linux for testing
+// In console, run: window.STARBAR_FORCE_MAC = true; location.reload();
+let STARBAR_FORCE_MAC = false;
+
 // Utility function for robust Mac detection
 function isMacPlatform() {
+  if (window.STARBAR_FORCE_MAC === true) {
+    return true;
+  }
   return navigator.platform.includes('Mac') || navigator.userAgent.includes('Mac');
 }
 
@@ -1107,14 +1114,7 @@ function updateQuickbar() {
         btn.appendChild(iconImg);
         btn.appendChild(textWrapper);
       } else {
-        // Add star icon for non-color functions
-        const starIcon = document.createElement("img");
-        starIcon.src = safeGetURL("star-default.svg");
-        starIcon.alt = "";
-        starIcon.style.width = "16px";
-        starIcon.style.height = "16px";
-        starIcon.style.marginRight = "6px";
-        starIcon.style.flexShrink = "0";
+        // No icon for regular functions - just text with hotkey
 
         // Get hotkey display text (primary is Ctrl+Alt on Win/Linux, Cmd+Option on Mac, fallback is Alt+Shift)
         let hotkeyText = "";
@@ -1135,9 +1135,8 @@ function updateQuickbar() {
         btn.innerHTML = "";
         btn.style.display = "flex";
         btn.style.alignItems = "center";
-        btn.style.justifyContent = "flex-start";
+        btn.style.justifyContent = "center";
 
-        btn.appendChild(starIcon);
         btn.appendChild(textWrapper);
       }
       Object.assign(btn.style, {
@@ -2111,23 +2110,28 @@ function setupHotkeys() {
       (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey);
     
     if (isPrimaryHotkey) {
-      console.log(`StarBar: Primary hotkey detected with key: ${e.key}`);
-      switch (e.key.toLowerCase()) {
-        case 'z':
+      // On Mac, Cmd+Option can produce special characters, so check e.code instead of e.key
+      const keyCode = e.code.toLowerCase();
+      const keyChar = e.key.toLowerCase();
+      
+      // Only process if we have a valid letter key (not just modifier keys)
+      if (keyCode.startsWith('key') || ['z', 'x', 's', 'ω', '≈', 'ß'].includes(keyChar)) {
+        console.log(`StarBar: Primary hotkey detected with key: ${e.key}, code: ${e.code}`);
+        
+        // Check both e.key and e.code for compatibility
+        if (keyCode === 'keyz' || keyChar === 'z' || keyChar === 'ω') {
           isHotkeyPressed = true;
           functionIndex = 0;
           hotkeyDisplay = isMac ? "⌘⌥Z" : "Ctrl+Alt+Z";
-          break;
-        case 'x':
+        } else if (keyCode === 'keyx' || keyChar === 'x' || keyChar === '≈') {
           isHotkeyPressed = true;
           functionIndex = 1;
           hotkeyDisplay = isMac ? "⌘⌥X" : "Ctrl+Alt+X";
-          break;
-        case 's':
+        } else if (keyCode === 'keys' || keyChar === 's' || keyChar === 'ß') {
           isHotkeyPressed = true;
           functionIndex = 2;
           hotkeyDisplay = isMac ? "⌘⌥S" : "Ctrl+Alt+S";
-          break;
+        }
       }
     }
     
@@ -2135,23 +2139,22 @@ function setupHotkeys() {
     const isAltShift = (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey);
     
     if (isAltShift && !isHotkeyPressed) {
-      console.log(`StarBar: Alt+Shift detected with key: ${e.key}`);
-      switch (e.key.toLowerCase()) {
-        case 'z':
-          isHotkeyPressed = true;
-          functionIndex = 0;
-          hotkeyDisplay = navigator.platform.includes('Mac') ? "⌥⇧Z" : "Alt+Shift+Z";
-          break;
-        case 'x':
-          isHotkeyPressed = true;
-          functionIndex = 1;
-          hotkeyDisplay = navigator.platform.includes('Mac') ? "⌥⇧X" : "Alt+Shift+X";
-          break;
-        case 's':
-          isHotkeyPressed = true;
-          functionIndex = 2;
-          hotkeyDisplay = navigator.platform.includes('Mac') ? "⌥⇧S" : "Alt+Shift+S";
-          break;
+      console.log(`StarBar: Alt+Shift detected with key: ${e.key}, code: ${e.code}`);
+      const keyCode = e.code.toLowerCase();
+      const keyChar = e.key.toLowerCase();
+      
+      if (keyCode === 'keyz' || keyChar === 'z') {
+        isHotkeyPressed = true;
+        functionIndex = 0;
+        hotkeyDisplay = isMac ? "⌥⇧Z" : "Alt+Shift+Z";
+      } else if (keyCode === 'keyx' || keyChar === 'x') {
+        isHotkeyPressed = true;
+        functionIndex = 1;
+        hotkeyDisplay = isMac ? "⌥⇧X" : "Alt+Shift+X";
+      } else if (keyCode === 'keys' || keyChar === 's') {
+        isHotkeyPressed = true;
+        functionIndex = 2;
+        hotkeyDisplay = isMac ? "⌥⇧S" : "Alt+Shift+S";
       }
     }
     
@@ -2246,21 +2249,32 @@ function setupAlternativeHotkeys() {
   
   // Add event listener to window as well as document
   const handleKeyEvent = (e) => {
+    // Only process if we have a letter key, not just modifier keys
+    const keyCode = e.code.toLowerCase();
+    const keyChar = e.key.toLowerCase();
+    const isLetterKey = keyCode.startsWith('key') || ['z', 'x', 's', 'ω', '≈', 'ß'].includes(keyChar);
+    
+    if (!isLetterKey) return;
+    
     if (e.altKey || e.shiftKey || e.ctrlKey || e.metaKey) {
       console.log(`StarBar ALT hotkey: Key=${e.key}, Alt=${e.altKey}, Shift=${e.shiftKey}, Ctrl=${e.ctrlKey}, Meta=${e.metaKey}`);
       
       // Check for primary hotkeys - Ctrl+Alt on Win/Linux, Cmd+Option on Mac
-      const isMac = navigator.platform.includes('Mac');
+      const isMac = isMacPlatform();
       const isPrimaryHotkey = isMac ? 
         (e.metaKey && e.altKey && !e.shiftKey && !e.ctrlKey) : 
         (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey);
       
       if (isPrimaryHotkey) {
         let functionIndex = -1;
-        switch (e.key.toLowerCase()) {
-          case 'z': functionIndex = 0; break;
-          case 'x': functionIndex = 1; break;
-          case 's': functionIndex = 2; break;
+        
+        // Check both e.key and e.code for Mac compatibility
+        if (keyCode === 'keyz' || keyChar === 'z' || keyChar === 'ω') {
+          functionIndex = 0;
+        } else if (keyCode === 'keyx' || keyChar === 'x' || keyChar === '≈') {
+          functionIndex = 1;
+        } else if (keyCode === 'keys' || keyChar === 's' || keyChar === 'ß') {
+          functionIndex = 2;
         }
         
         if (functionIndex >= 0) {
@@ -2270,8 +2284,8 @@ function setupAlternativeHotkeys() {
           e.stopImmediatePropagation();
           
           const hotkeyDisplay = isMac ? 
-            `⌘⌥${e.key.toUpperCase()}` : 
-            `Ctrl+Alt+${e.key.toUpperCase()}`;
+            `⌘⌥${['Z', 'X', 'S'][functionIndex]}` : 
+            `Ctrl+Alt+${['Z', 'X', 'S'][functionIndex]}`;
           executeHotkeyAction(functionIndex, hotkeyDisplay);
           return false;
         }
