@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "StarFlo",
-  "version": "1.12",
+  "version": "1.14",
   "description": "Pin and access your favorite Google Sheets functions instantly.",
   "permissions": ["storage", "scripting", "activeTab", "contextMenus"],
   "host_permissions": ["https://docs.google.com/spreadsheets/*"],
