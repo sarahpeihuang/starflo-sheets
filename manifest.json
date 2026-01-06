@@ -28,8 +28,8 @@
   "content_scripts": [
     {
       "matches": ["https://docs.google.com/spreadsheets/*"],
-      "js": ["content.js"],
-      "css": ["styles.css"]
+      "js": ["intro.js", "content.js", "onboarding.js"],
+      "css": ["intro.css", "styles.css"]
     }
   ],
 
@@ -41,7 +41,9 @@
         "star-drag.svg",
         "gripper.svg",
         "A.svg",
-        "fill.svg"
+        "fill.svg",
+        "intro.js",
+        "intro.css"
       ],
       "matches": ["<all_urls>"]
     }
