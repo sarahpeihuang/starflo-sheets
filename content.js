@@ -2435,6 +2435,50 @@ function init() {
   createToolbar();
   observeMenus();
 
+  // Check if user has seen onboarding and start tour if needed
+  chrome.storage.local.get(['hasSeenOnboarding'], (result) => {
+    console.log('StarBar: Checking onboarding status:', result);
+    
+    if (!result.hasSeenOnboarding) {
+      console.log('StarBar: User has not seen onboarding, will start tour');
+      
+      // Wait for:
+      // 1. Toolbar to be fully created
+      // 2. Google Sheets interface to be ready
+      // 3. intro.js library to be loaded
+      setTimeout(() => {
+        console.log('StarBar: Attempting to start onboarding tour');
+        
+        // Check if intro.js is loaded
+        if (typeof introJs === 'undefined') {
+          console.error('StarBar: intro.js library not loaded!');
+          return;
+        }
+        
+        // Check if onboarding function exists
+        if (typeof window.startOnboardingTour !== 'function') {
+          console.error('StarBar: startOnboardingTour function not found!');
+          return;
+        }
+        
+        // Check if quickbar exists
+        const quickbar = document.getElementById('quickbar');
+        if (!quickbar) {
+          console.error('StarBar: Quickbar not found, cannot start tour');
+          return;
+        }
+        
+        // All checks passed - start the tour!
+        console.log('StarBar: Starting onboarding tour now');
+        window.startOnboardingTour();
+        
+      }, 2000); // Wait 2 seconds for everything to be ready
+    } else {
+      console.log('StarBar: User has already seen onboarding');
+    }
+  });
+
+
   // Reset menu path when menus are closed (like pressing Escape)
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
