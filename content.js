@@ -28,193 +28,114 @@ let isViewOnlySheet = false;
 let menuObserver = null;
 let attributeObserver = null; 
 
+// Helper function to get hotkey text for a given index
+function getHotkeyText(index) {
+  const isMac = navigator.platform.includes('Mac');
+  const keys = ['Z', 'X', 'S'];
+  if (index < 0 || index >= keys.length) return '';
+  return isMac ? `(⌘⌥${keys[index]})` : `(Ctrl+Alt+${keys[index]})`;
+}
+
+// Helper function to get full hotkey display for tooltip
+function getHotkeyDisplay(index) {
+  const isMac = navigator.platform.includes('Mac');
+  const keys = ['Z', 'X', 'S'];
+  if (index < 0 || index >= keys.length) return '';
+  return isMac ? `⌘⌥${keys[index]} or ⌥⇧${keys[index]}` : `Ctrl+Alt+${keys[index]} or Alt+Shift+${keys[index]}`;
+}
+
+// Helper function to dispatch Escape key event
+function dispatchEscape() {
+  document.dispatchEvent(new KeyboardEvent("keydown", {
+    key: "Escape",
+    code: "Escape",
+    keyCode: 27,
+  }));
+}
+
+// Helper function to check if a button is in active state
+function isButtonActive(btn) {
+  return btn.getAttribute("aria-pressed") === "true" ||
+         btn.classList.contains("goog-toolbar-button-checked") ||
+         btn.classList.contains("active") ||
+         btn.classList.contains("goog-toolbar-button-selected");
+}
+
+// Helper function to get button label
+function getButtonLabel(btn) {
+  return (
+    btn.getAttribute("aria-label") ||
+    btn.getAttribute("data-tooltip") ||
+    btn.getAttribute("title") ||
+    ""
+  ).toLowerCase();
+}
+
 
 function isExtensionContextValid() {
-  try {
-    return chrome && chrome.runtime && chrome.runtime.id;
-  } catch (error) {
-    return false;
-  }
+  try { return chrome?.runtime?.id; } catch { return false; }
 }
 
 function safeStorageGet(key, callback) {
-  if (!isExtensionContextValid()) {
-    console.warn("Extension context invalidated - using fallback");
-    callback({ [key]: [] });
-    return;
-  }
-
-  try {
-    chrome.storage.local.get(key, callback);
-  } catch (error) {
-    console.warn("Storage get failed:", error);
-    callback({ [key]: [] });
-  }
+  if (!isExtensionContextValid()) return callback({ [key]: [] });
+  try { chrome.storage.local.get(key, callback); } catch { callback({ [key]: [] }); }
 }
 
 function safeStorageSet(data, callback) {
-  if (!isExtensionContextValid()) {
-    console.warn("Extension context invalidated - cannot save data");
-    if (callback) callback();
-    return;
-  }
-
-  try {
-    chrome.storage.local.set(data, callback);
-  } catch (error) {
-    console.warn("Storage set failed:", error);
-    if (callback) callback();
-  }
+  if (!isExtensionContextValid()) return callback?.();
+  try { chrome.storage.local.set(data, callback); } catch { callback?.(); }
 }
 
 function safeGetURL(path) {
-  if (!isExtensionContextValid()) {
-    console.warn("Extension context invalidated - using fallback URL");
-    return `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"></svg>`;
-  }
-
-  try {
-    return chrome.runtime.getURL(path);
-  } catch (error) {
-    console.warn("getURL failed:", error);
-    return `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"></svg>`;
-  }
+  const fallback = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"></svg>`;
+  if (!isExtensionContextValid()) return fallback;
+  try { return chrome.runtime.getURL(path); } catch { return fallback; }
 }
 
 // Function to detect if the current sheet is view-only
 function detectViewOnlySheet() {
-  // Method 1: Check URL for view-only indicators (most reliable)
   const url = window.location.href;
-  if (url.includes('/view') || url.includes('/preview') || url.includes('usp=sharing')) {
-    console.log("View-only detected via URL pattern");
-    return true;
-  }
+  if (url.includes('/view') || url.includes('/preview') || url.includes('usp=sharing')) return true;
+  if (!document.body || document.readyState === 'loading') return false;
   
-  // Early return if document isn't ready yet
-  if (!document.body || document.readyState === 'loading') {
-    console.log("Document not ready, deferring view-only detection");
-    return false;
-  }
+  // Check for "View only" badge
+  const viewOnlySelectors = ['[title*="View only"]', '[aria-label*="View only"]', '.docs-titlebar-badges', '.docs-activity-indicator', '[data-tooltip*="view only"]'];
+  const hasViewOnlyBadge = viewOnlySelectors.some(sel => 
+    Array.from(document.querySelectorAll(sel)).some(el => {
+      const combined = `${el.textContent || ''} ${el.getAttribute('aria-label') || ''} ${el.getAttribute('title') || ''}`.toLowerCase();
+      return combined.includes('view only') || combined.includes('viewing only');
+    })
+  );
+  if (hasViewOnlyBadge) return true;
   
-  // Method 2: Check for "View only" badge in Google Sheets interface
-  const viewOnlySelectors = [
-    '[title*="View only"]',
-    '[aria-label*="View only"]',
-    '.docs-titlebar-badges',
-    '.docs-activity-indicator',
-    '[data-tooltip*="view only"]'
-  ];
+  // Check page title
+  if (document.title?.includes('- View only')) return true;
   
-  for (const selector of viewOnlySelectors) {
-    const elements = document.querySelectorAll(selector);
-    for (const element of elements) {
-      const text = (element.textContent || '').toLowerCase();
-      const ariaLabel = (element.getAttribute('aria-label') || '').toLowerCase();
-      const title = (element.getAttribute('title') || '').toLowerCase();
-      
-      if (text.includes('view only') || text.includes('viewing only') ||
-          ariaLabel.includes('view only') || title.includes('view only')) {
-        console.log("View-only detected via UI element:", selector);
-        return true;
-      }
-    }
-  }
+  // Check for absence of editing features
+  const editFeatureSelectors = ['[aria-label*="Share"]', '[aria-label*="Insert"]', '[aria-label*="Format"]', '[aria-label*="Tools"]', '[aria-label*="Extensions"]', '[data-tooltip*="Share"]', 'div[role="menubar"]'];
+  const editFeaturesFound = editFeatureSelectors.filter(sel => document.querySelector(sel)).length;
+  if (editFeaturesFound < 3) return true;
   
-  // Method 3: Check page title
-  const titleElement = document.querySelector('title');
-  if (titleElement && titleElement.textContent.includes('- View only')) {
-    console.log("View-only detected via document title");
-    return true;
-  }
-  
-  // Method 4: Check for absence of key editing features in Google Sheets
-  // Look for the absence of common edit buttons that appear in editable sheets
-  const editFeatureSelectors = [
-    '[aria-label*="Share"]',
-    '[aria-label*="Insert"]',
-    '[aria-label*="Format"]',
-    '[aria-label*="Tools"]',
-    '[aria-label*="Extensions"]',
-    '[data-tooltip*="Share"]',
-    'div[role="menubar"]' // The main menu bar
-  ];
-  
-  let editFeaturesFound = 0;
-  for (const selector of editFeatureSelectors) {
-    const elements = document.querySelectorAll(selector);
-    if (elements.length > 0) {
-      editFeaturesFound++;
-    }
-  }
-  
-  // If very few edit features are found, likely view-only
-  if (editFeaturesFound < 3) {
-    console.log("View-only detected via missing edit features, found:", editFeaturesFound);
-    return true;
-  }
-  
-  // Method 5: Check for specific Google Sheets view-only indicators
-  // In view-only mode, certain toolbar sections are hidden or disabled
+  // Check toolbar buttons count
   const toolbar = document.querySelector('.docs-material');
-  if (toolbar) {
-    const toolbarButtons = toolbar.querySelectorAll('div[role="button"], button');
-    if (toolbarButtons.length < 10) { // Editable sheets typically have many toolbar buttons
-      console.log("View-only detected via limited toolbar buttons");
-      return true;
-    }
-  }
+  if (toolbar && toolbar.querySelectorAll('div[role="button"], button').length < 10) return true;
   
-  console.log("Sheet appears to be editable, edit features found:", editFeaturesFound);
   return false;
 }
 
 // Helper function that simulates click action
 function simulateClick(el) {
-  if (el.focus) {
-    el.focus();
-  }
-
+  el.focus?.();
   const rect = el.getBoundingClientRect();
-  const centerX = rect.left + rect.width / 2;
-  const centerY = rect.top + rect.height / 2;
-
-  const mouseEvents = [
-    new MouseEvent("mousedown", {
-      bubbles: true,
-      cancelable: true,
-      clientX: centerX,
-      clientY: centerY,
-      button: 0,
-    }),
-    new MouseEvent("mouseup", {
-      bubbles: true,
-      cancelable: true,
-      clientX: centerX,
-      clientY: centerY,
-      button: 0,
-    }),
-    new MouseEvent("click", {
-      bubbles: true,
-      cancelable: true,
-      clientX: centerX,
-      clientY: centerY,
-      button: 0,
-    }),
-  ];
-
-  mouseEvents.forEach((event) => el.dispatchEvent(event));
+  const opts = { bubbles: true, cancelable: true, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2, button: 0 };
+  ["mousedown", "mouseup", "click"].forEach(type => el.dispatchEvent(new MouseEvent(type, opts)));
 }
 
 // Enhanced click function for submenu items
 function simulateSubmenuClick(el) {
-  // For submenu items, we might need hover events to trigger the submenu
   el.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
   el.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-
-  // Click immediately after hover events
-  el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-  el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
-  el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  ["mousedown", "mouseup", "click"].forEach(type => el.dispatchEvent(new MouseEvent(type, { bubbles: true })));
 }
 
 function cleanText(text) {
@@ -230,9 +151,6 @@ function cleanText(text) {
 }
 
 function triggerMenuPath(path) {
-  console.log("=== TRIGGER MENU PATH ===");
-  console.log("Full path:", path);
-  
   // Close any existing menus first to ensure clean state
   try {
     // Press Escape to close any open menus/dialogs
@@ -249,7 +167,6 @@ function triggerMenuPath(path) {
       executeMenuPath(path);
     }, 100);
   } catch (error) {
-    console.log("StarBar: Error closing menus, proceeding anyway:", error);
     executeMenuPath(path);
   }
 }
@@ -257,13 +174,7 @@ function triggerMenuPath(path) {
 function executeMenuPath(path) {
   const labels = path.split(" > ").map((l) => l.trim());
   const [first, ...rest] = labels;
-
-  console.log("First:", first);
-  console.log("Rest:", rest);
-
   if (first === "Text color" || first === "Fill color") {
-    console.log("MATCHED COLOR CASE:", first);
-
     const possibleLabels = [];
     if (first === "Fill color") {
       possibleLabels.push(
@@ -288,84 +199,28 @@ function executeMenuPath(path) {
       btn = Array.from(document.querySelectorAll("[aria-label]")).find(
         (el) => cleanText(el.getAttribute("aria-label")) === cleanText(label)
       );
-      if (btn) {
-        console.log(
-          `Found ${first} button with label: "${btn.getAttribute(
-            "aria-label"
-          )}"`
-        );
-        break;
-      }
+      if (btn) break;
     }
 
-    // If still not found, try more generic selectors
+    // If still not found, try more generic selectors for fill color
     if (!btn && first === "Fill color") {
-      const fillColorSelectors = [
-        '[data-tooltip*="fill"]',
-        '[data-tooltip*="background"]',
-        '[aria-label*="fill"]',
-        '[aria-label*="background"]',
-        ".docs-icon-fill-color",
-        ".docs-icon-background-color",
-      ];
-
-      for (const selector of fillColorSelectors) {
-        const elements = document.querySelectorAll(selector);
-        if (elements.length > 0) {
-          btn = elements[0];
-          console.log(`Found fill color button using selector: ${selector}`);
-          break;
-        }
-      }
+      const fillColorSelectors = ['[data-tooltip*="fill"]', '[data-tooltip*="background"]', '[aria-label*="fill"]', '[aria-label*="background"]', ".docs-icon-fill-color", ".docs-icon-background-color"];
+      btn = fillColorSelectors.map(sel => document.querySelector(sel)).find(el => el);
     }
 
     if (!btn) {
-      const allButtons = Array.from(document.querySelectorAll("[aria-label]"))
-        .filter((el) => {
-          const label = el.getAttribute("aria-label").toLowerCase();
-          return (
-            label.includes("color") ||
-            label.includes("colour") ||
-            label.includes("fill") ||
-            label.includes("background")
-          );
-        })
-        .map((el) => el.getAttribute("aria-label"));
-
-      console.log(
-        `Could not find "${first}" button. Available color-related buttons:`,
-        allButtons
-      );
-      alert(
-        `Could not find "${first}" button. Check console for available options.`
-      );
+      alert(`Could not find "${first}" button. Check console for available options.`);
       return;
     }
-
-    console.log(`Clicking ${first} button...`);
-
     simulateClick(btn);
 
     const targetColor = cleanText(rest.join(" > "));
-    console.log(`Looking for color: "${targetColor}"`);
-
     const tryClickColor = (attempt = 1) => {
-      console.log(`Color search attempt ${attempt} for ${first}`);
-
       // For fill color, also look for dropdown menus that might appear
       if (first === "Fill color") {
         const dropdowns = document.querySelectorAll(
           '[role="listbox"], [role="menu"], .goog-menu'
         );
-        console.log(`Fill color dropdowns found: ${dropdowns.length}`);
-
-        dropdowns.forEach((dropdown, index) => {
-          if (dropdown.offsetParent !== null) {
-            console.log(
-              `Dropdown ${index} visible with ${dropdown.children.length} children`
-            );
-          }
-        });
       }
 
       // Look for color swatches in the color picker - cast a wider net
@@ -397,9 +252,6 @@ function executeMenuPath(path) {
           );
         }
       );
-
-      console.log(`Found ${allElements.length} potential color elements`);
-
       // Try exact match first
       let colorButtons = allElements.filter((el) => {
         const label = el.getAttribute("aria-label");
@@ -412,14 +264,9 @@ function executeMenuPath(path) {
           cleanText(dataValue) === targetColor
         );
       });
-
-      console.log(`Exact matches found: ${colorButtons.length}`);
-
       // If no exact match, try partial/fuzzy matching
       if (colorButtons.length === 0) {
         const targetWords = targetColor.toLowerCase().split(/\s+/);
-        console.log(`Searching for words: ${targetWords.join(", ")}`);
-
         colorButtons = allElements.filter((el) => {
           const label = (
             el.getAttribute("aria-label") ||
@@ -442,8 +289,6 @@ function executeMenuPath(path) {
             label.includes("grey");
           return hasAllWords && hasColorReference;
         });
-
-        console.log(`Fuzzy matches found: ${colorButtons.length}`);
       }
 
       // Also try looking for color swatches by common selectors and background color
@@ -453,9 +298,6 @@ function executeMenuPath(path) {
             '.docs-material-colorpalette-cell, .goog-palette-cell, [role="gridcell"], .color-cell, .palette-cell, [style*="background-color"]'
           )
         ).filter((el) => el.offsetParent !== null);
-
-        console.log(`Found ${colorSwatches.length} color swatches`);
-
         colorButtons = colorSwatches.filter((el) => {
           const label = (
             el.getAttribute("aria-label") ||
@@ -465,41 +307,15 @@ function executeMenuPath(path) {
           const targetWords = targetColor.toLowerCase().split(/\s+/);
           return targetWords.some((word) => label.includes(word));
         });
-
-        console.log(`Swatch matches found: ${colorButtons.length}`);
       }
 
       if (colorButtons.length > 0) {
         const selectedButton = colorButtons[0];
-        console.log(
-          `Found color match: "${
-            selectedButton.getAttribute("aria-label") ||
-            selectedButton.getAttribute("title")
-          }" (${selectedButton.className})`
-        );
-
-        // Check if cells are selected
-        const selectedCells = document.querySelectorAll(
-          '.docs-sheet-active-cell, .docs-sheet-selected-cell, [aria-selected="true"]'
-        );
-        console.log(`Selected cells found: ${selectedCells.length}`);
-
-        if (selectedCells.length === 0) {
-          console.warn("No cells appear to be selected. Color may not apply.");
-        }
-
-        console.log(
-          `About to click color: ${selectedButton.tagName} with classes: ${selectedButton.className}`
-        );
-
         // Simple and direct color click for both fill and text
-        console.log(`Clicking color swatch for ${first}`);
         simulateClick(selectedButton);
 
         // Wait and verify color application
         setTimeout(() => {
-          console.log(`${first} color application completed`);
-
           // Check if the color picker is still open (might indicate the click didn't work)
           const colorPickers = document.querySelectorAll(
             '[role="dialog"], .goog-menu, .docs-material-colorpalette'
@@ -509,38 +325,13 @@ function executeMenuPath(path) {
               picker.offsetParent !== null &&
               getComputedStyle(picker).visibility !== "hidden"
           );
-
-          if (openPickers.length > 0) {
-            console.warn(
-              "Color picker still appears to be open - color may not have been applied"
-            );
-          } else {
-            console.log("Color picker closed - color should be applied");
-          }
         }, 500);
       } else if (attempt < 3) {
         // Retry up to 3 times with increasing delays
-        console.log(`No color found, retrying in ${300 * attempt}ms...`);
         setTimeout(() => tryClickColor(attempt + 1), 300 * attempt);
       } else {
         // Debug: log available colors to help troubleshoot
-        console.log("=== DEBUG INFO ===");
-        console.log("Target color:", targetColor);
-        console.log("Button type:", first);
-
         const visibleElements = allElements.slice(0, 20); // Limit to first 20 to avoid spam
-        console.log(
-          "Sample visible elements with color info:",
-          visibleElements.map((el) => ({
-            tag: el.tagName,
-            label: el.getAttribute("aria-label"),
-            title: el.getAttribute("title"),
-            dataValue: el.getAttribute("data-value"),
-            className: el.className,
-            backgroundColor: el.style.backgroundColor,
-          }))
-        );
-
         alert(
           `Could not find color "${rest.join(
             " > "
@@ -555,24 +346,16 @@ function executeMenuPath(path) {
 
   // === SIMPLE: Convert generic "Color" to "Text color" ===
   if (first === "Color") {
-    console.log("Converting generic Color path to Text color:", path);
     triggerMenuPath(`Text color > ${rest.join(" > ")}`);
     return;
   }
-
-  console.log("Navigating menu path:", labels);
   navigateMenuPathImproved(labels);
 }
 
 function navigateMenuPathImproved(labelPath) {
   if (labelPath.length === 0) {
-    console.warn("Empty label path provided");
     return;
   }
-
-  console.log("Full navigation path:", labelPath);
-  console.log("Path length:", labelPath.length);
-
   const topMenuLabel = cleanText(labelPath[0]);
 
   // Step 1: Find and click the top-level menu
@@ -584,84 +367,45 @@ function navigateMenuPathImproved(labelPath) {
     alert(`Could not find top menu: "${labelPath[0]}"`);
     return;
   }
-
-  console.log(
-    `Found top menu: "${topMenuLabel}", will navigate ${
-      labelPath.length - 1
-    } more levels`
-  );
   simulateClick(topMenu);
 
   // Step 2: Navigate through the rest of the path
   if (labelPath.length > 1) {
     setTimeout(() => {
-      console.log("Starting submenu navigation with:", labelPath.slice(1));
       navigateSubmenuPath(labelPath.slice(1), 0);
     }, 250);
   } else {
     // Just opening the top menu, close after a moment
-    setTimeout(() => {
-      document.dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key: "Escape",
-          code: "Escape",
-          keyCode: 27,
-        })
-      );
-    }, 300);
+    setTimeout(dispatchEscape, 300);
   }
 }
 
 function navigateSubmenuPath(remainingPath, depth, retryCount = 0) {
   if (remainingPath.length === 0) {
-    console.log("Navigation complete - no more items in path");
     return;
   }
 
   const targetLabel = cleanText(remainingPath[0]);
   const isLastItem = remainingPath.length === 1;
-
-  console.log(
-    `[Depth ${depth}] Looking for "${targetLabel}" (original: "${
-      remainingPath[0]
-    }"), isLast: ${isLastItem}, remaining after this: ${
-      remainingPath.length - 1
-    }, retry: ${retryCount}`
-  );
-
   setTimeout(() => {
     const allMenus = Array.from(
       document.querySelectorAll('[role="menu"]')
     ).filter((menu) => menu.offsetParent !== null);
-
-    console.log(`Found ${allMenus.length} visible menu(s)`);
-
     allMenus.forEach((menu, index) => {
       const rect = menu.getBoundingClientRect();
       const items = Array.from(menu.querySelectorAll('[role="menuitem"]'))
         .filter((el) => el.offsetParent !== null)
         .slice(0, 3) // Show first 3 items
         .map((el) => cleanText(el.textContent));
-      console.log(
-        `Menu ${index}: pos(${Math.round(rect.left)}, ${Math.round(
-          rect.top
-        )}), items: [${items.join(", ")}...]`
-      );
     });
 
     if (allMenus.length === 0) {
       if (retryCount < 3) {
-        console.warn(
-          `No visible menus found at depth ${depth}, retrying in 300ms... (attempt ${
-            retryCount + 1
-          }/3)`
-        );
         setTimeout(() => {
           navigateSubmenuPath(remainingPath, depth, retryCount + 1); // Retry same step
         }, 300);
         return;
       } else {
-        console.error("No visible menus found after multiple retries");
         alert(
           `Could not find submenu for: "${remainingPath[0]}". The submenu may not have opened properly.`
         );
@@ -683,24 +427,10 @@ function navigateSubmenuPath(remainingPath, depth, retryCount = 0) {
     });
 
     const currentMenu = sortedMenus[0];
-
-    console.log(
-      `Looking in menu at position (${
-        currentMenu.getBoundingClientRect().left
-      }, ${currentMenu.getBoundingClientRect().top})`
-    );
-
     if (depth > 0 && allMenus.length > 1) {
       const mainMenuRect =
         sortedMenus[sortedMenus.length - 1].getBoundingClientRect();
       const currentMenuRect = currentMenu.getBoundingClientRect();
-
-      // Submenu should be to the right of main menu
-      if (currentMenuRect.left <= mainMenuRect.left) {
-        console.warn(
-          "Warning: Expected submenu but menu position doesn't look right"
-        );
-      }
     }
 
     const allItems = Array.from(
@@ -714,17 +444,6 @@ function navigateSubmenuPath(remainingPath, depth, retryCount = 0) {
         const hasSubmenu = el.getAttribute("aria-haspopup") === "true";
         return { el, rawText, cleaned, hasSubmenu };
       });
-
-    console.log(
-      "Available menu items:",
-      allItems.map(
-        (item) =>
-          `"${item.cleaned}" (raw: "${item.rawText}") ${
-            item.hasSubmenu ? "[HAS SUBMENU]" : ""
-          }`
-      )
-    );
-
     // Find the menu item - try multiple matching strategies
     let menuItem = null;
     let foundItem = null;
@@ -831,11 +550,6 @@ function navigateSubmenuPath(remainingPath, depth, retryCount = 0) {
           return keywords.some((keyword) => itemClean.includes(keyword));
         });
         if (foundItem) {
-          console.log(
-            `Special case match: "${targetLabelClean}" matched "${
-              foundItem.cleaned
-            }" using keywords: ${keywords.join(", ")}`
-          );
           menuItem = foundItem.el;
         }
       }
@@ -845,13 +559,6 @@ function navigateSubmenuPath(remainingPath, depth, retryCount = 0) {
       const availableItems = allItems.map(
         (item) => `"${item.cleaned}" (raw: "${item.rawText}")`
       );
-
-      console.error(`Could not find "${remainingPath[0]}" at depth ${depth}`, {
-        searchedFor: targetLabel,
-        originalText: remainingPath[0],
-        availableItems: availableItems,
-      });
-
       alert(
         `Could not find menu item: "${
           remainingPath[0]
@@ -861,54 +568,24 @@ function navigateSubmenuPath(remainingPath, depth, retryCount = 0) {
       );
 
       // Close all menus
-      setTimeout(() => {
-        document.dispatchEvent(
-          new KeyboardEvent("keydown", {
-            key: "Escape",
-            code: "Escape",
-            keyCode: 27,
-          })
-        );
-      }, 100);
+      setTimeout(dispatchEscape, 100);
       return;
     }
 
     const itemHasSubmenu = foundItem?.hasSubmenu || false;
-    console.log(
-      `Found menu item: "${cleanText(
-        menuItem.textContent
-      )}", hasSubmenu: ${itemHasSubmenu}, isLastInPath: ${isLastItem}`
-    );
-
     // Click the menu item - use enhanced click for submenu items that need to open submenus
     if (itemHasSubmenu && !isLastItem) {
-      console.log("Using enhanced submenu click (with hover) to open submenu");
       simulateSubmenuClick(menuItem);
     } else {
-      console.log("Using standard click for final action or non-submenu item");
       simulateClick(menuItem);
-
-      // For final items that aren't dialog actions, add a small delay to ensure click registers
-      if (isLastItem && !itemHasSubmenu) {
-        console.log(
-          "Final simple menu item clicked - ensuring click has time to register"
-        );
-      }
     }
 
     if (!isLastItem && itemHasSubmenu) {
-      console.log(
-        `Item has submenu and more path remains, continuing to depth ${
-          depth + 1
-        }`
-      );
       setTimeout(() => {
         navigateSubmenuPath(remainingPath.slice(1), depth + 1);
       }, 600); // Reduced timeout - was too long for simple menu items
     } else if (isLastItem) {
       // This was the final item in path
-      console.log("Clicked final item in path");
-
       const actionText = cleanText(remainingPath[0]);
       const shouldKeepDialogOpen = [
         "pdf (.pdf)",
@@ -928,10 +605,6 @@ function navigateSubmenuPath(remainingPath, depth, retryCount = 0) {
       ].some((action) => actionText.includes(action));
 
       if (shouldKeepDialogOpen) {
-        console.log(
-          "Action opens dialog/popup - not closing menus immediately"
-        );
-
         // Check multiple times for dialog appearance with increasing delays
         const checkForDialog = (attempt = 1, maxAttempts = 5) => {
           setTimeout(() => {
@@ -972,59 +645,22 @@ function navigateSubmenuPath(remainingPath, depth, retryCount = 0) {
             const hasOverlay = document.querySelector(
               '.docs-material-dialog-backdrop, .goog-modalpopup-bg, .modal-backdrop, [class*="overlay"], [class*="backdrop"]'
             );
-
-            console.log(
-              `Dialog check attempt ${attempt}: hasDialog=${hasDialog}, hasOverlay=${!!hasOverlay}`
-            );
-
-            if (hasDialog || hasOverlay) {
-              console.log("Dialog/overlay detected, leaving menus open");
-              return; // Don't close menus
-            }
+            if (hasDialog || hasOverlay) return;
 
             if (attempt < maxAttempts) {
-              // Try again with longer delay
               checkForDialog(attempt + 1, maxAttempts);
             } else {
-              console.log(
-                "No dialog detected after multiple attempts, closing menus"
-              );
-              document.dispatchEvent(
-                new KeyboardEvent("keydown", {
-                  key: "Escape",
-                  code: "Escape",
-                  keyCode: 27,
-                })
-              );
+              dispatchEscape();
             }
-          }, attempt * 500); // Increasing delays: 500ms, 1s, 1.5s, 2s, 2.5s
+          }, attempt * 500);
         };
 
         checkForDialog();
       } else {
-        // Regular menu items - close after giving action time to complete
-        console.log("Regular menu item - closing menus after short delay");
-        setTimeout(() => {
-          document.dispatchEvent(
-            new KeyboardEvent("keydown", {
-              key: "Escape",
-              code: "Escape",
-              keyCode: 27,
-            })
-          );
-        }, 200);
+        setTimeout(dispatchEscape, 200);
       }
     } else {
-      console.warn("Path expects more items but current item has no submenu");
-      setTimeout(() => {
-        document.dispatchEvent(
-          new KeyboardEvent("keydown", {
-            key: "Escape",
-            code: "Escape",
-            keyCode: 27,
-          })
-        );
-      }, 400);
+      setTimeout(dispatchEscape, 400);
     }
   }, 150 + depth * 100);
 }
@@ -1060,85 +696,24 @@ function updateQuickbar() {
         funcList[funcList.length - 1].trim().slice(0, 1).toUpperCase() +
         funcList[funcList.length - 1].trim().slice(1);
 
-      let iconSrc = null;
+      const iconSrc = func.includes("Fill color") ? safeGetURL("fill.svg") : 
+                      func.includes("Text color") ? safeGetURL("A.svg") : null;
+      
+      const hotkeyText = getHotkeyText(index);
+      const textWrapper = document.createElement("span");
+      textWrapper.innerHTML = btnText + (hotkeyText ? `<span style="font-size: 10px; opacity: 0.7; margin-left: 4px;">${hotkeyText}</span>` : '');
+      textWrapper.style.cssText = "flex-grow: 1; text-align: center; display: flex; align-items: center; justify-content: center;";
 
-      if (func.includes("Fill color")) {
-        iconSrc = safeGetURL("fill.svg");
-        console.log("QUICKBAR: Fill color detected:", func);
-      } else if (func.includes("Text color")) {
-        iconSrc = safeGetURL("A.svg");
-        console.log("QUICKBAR: Text color detected:", func);
-      } else {
-        console.log("QUICKBAR: Unknown color type:", func);
-      }
-
+      btn.style.cssText = "display: flex; align-items: center; justify-content: " + (iconSrc ? "flex-start" : "center") + ";";
+      
       if (iconSrc) {
         const iconImg = document.createElement("img");
-        iconImg.src = iconSrc;
-        iconImg.alt = "";
-        iconImg.style.width = "16px";
-        iconImg.style.height = "16px";
-        iconImg.style.marginRight = "6px";
-        iconImg.style.verticalAlign = "middle";
-
-        // Get hotkey display text (primary is Ctrl+Alt on Win/Linux, Cmd+Option on Mac, fallback is Alt+Shift)
-        let hotkeyText = "";
-        if (index === 0) {
-          hotkeyText = navigator.platform.includes('Mac') ? "(⌘⌥Z)" : "(Ctrl+Alt+Z)";
-        } else if (index === 1) {
-          hotkeyText = navigator.platform.includes('Mac') ? "(⌘⌥X)" : "(Ctrl+Alt+X)";
-        } else if (index === 2) {
-          hotkeyText = navigator.platform.includes('Mac') ? "(⌘⌥S)" : "(Ctrl+Alt+S)";
-        }
-
-        // Wrap text so icon and label align nicely
-        const textWrapper = document.createElement("span");
-        textWrapper.innerHTML = btnText + (hotkeyText ? `<span style="font-size: 10px; opacity: 0.7; margin-left: 4px;">${hotkeyText}</span>` : '');
-        textWrapper.style.display = "flex";
-        textWrapper.style.alignItems = "center";
-        textWrapper.style.justifyContent = "center";
-
-        btn.innerText = "";
-        btn.style.display = "flex";
-        btn.style.alignItems = "center";
-        btn.style.justifyContent = "flex-start";
-
-        iconImg.style.width = "16px";
-        iconImg.style.height = "16px";
-        iconImg.style.marginRight = "6px";
-        iconImg.style.flexShrink = "0";
-
-        textWrapper.style.flexGrow = "1";
-        textWrapper.style.textAlign = "center";
-
+        Object.assign(iconImg, { src: iconSrc, alt: "" });
+        iconImg.style.cssText = "width: 16px; height: 16px; margin-right: 6px; flex-shrink: 0;";
         btn.appendChild(iconImg);
-        btn.appendChild(textWrapper);
-      } else {
-        // No icon for regular functions - just text with hotkey
-
-        // Get hotkey display text (primary is Ctrl+Alt on Win/Linux, Cmd+Option on Mac, fallback is Alt+Shift)
-        let hotkeyText = "";
-        if (index === 0) {
-          hotkeyText = navigator.platform.includes('Mac') ? "(⌘⌥Z)" : "(Ctrl+Alt+Z)";
-        } else if (index === 1) {
-          hotkeyText = navigator.platform.includes('Mac') ? "(⌘⌥X)" : "(Ctrl+Alt+X)";
-        } else if (index === 2) {
-          hotkeyText = navigator.platform.includes('Mac') ? "(⌘⌥S)" : "(Ctrl+Alt+S)";
-        }
-
-        // Create text wrapper for consistent layout
-        const textWrapper = document.createElement("span");
-        textWrapper.innerHTML = btnText + (hotkeyText ? `<span style="font-size: 10px; opacity: 0.7; margin-left: 4px;">${hotkeyText}</span>` : '');
-        textWrapper.style.flexGrow = "1";
-        textWrapper.style.textAlign = "center";
-
-        btn.innerHTML = "";
-        btn.style.display = "flex";
-        btn.style.alignItems = "center";
-        btn.style.justifyContent = "center";
-
-        btn.appendChild(textWrapper);
       }
+      btn.appendChild(textWrapper);
+
       Object.assign(btn.style, {
         background: "#ffffff",
         color: "#454444",
@@ -1155,20 +730,10 @@ function updateQuickbar() {
       });
 
       // Add tooltip for hotkey information
-      let tooltipText = "";
-      if (index === 0) {
-        const hotkeyDisplay = navigator.platform.includes('Mac') ? "⌘⌥Z or ⌥⇧Z" : "Ctrl+Alt+Z or Alt+Shift+Z";
-        tooltipText = `Click or press ${hotkeyDisplay} to activate: ${btnText}`;
-      } else if (index === 1) {
-        const hotkeyDisplay = navigator.platform.includes('Mac') ? "⌘⌥X or ⌥⇧X" : "Ctrl+Alt+X or Alt+Shift+X";
-        tooltipText = `Click or press ${hotkeyDisplay} to activate: ${btnText}`;
-      } else if (index === 2) {
-        const hotkeyDisplay = navigator.platform.includes('Mac') ? "⌘⌥S or ⌥⇧S" : "Ctrl+Alt+S or Alt+Shift+S";
-        tooltipText = `Click or press ${hotkeyDisplay} to activate: ${btnText}`;
-      } else {
-        tooltipText = `Click to activate: ${btnText}`;
-      }
-      btn.title = tooltipText;
+      const hotkeyDisplay = getHotkeyDisplay(index);
+      btn.title = hotkeyDisplay 
+        ? `Click or press ${hotkeyDisplay} to activate: ${btnText}`
+        : `Click to activate: ${btnText}`;
 
       // Add hover effects
       if (!editingMode && !isViewOnlySheet) {
@@ -1184,7 +749,6 @@ function updateQuickbar() {
         btn.style.cursor = "default";
         btn.style.opacity = "0.6";
         btn.onclick = () => {
-          console.log("Button click blocked - view-only sheet");
           // Optional: Show a subtle notification
           // alert("This function is not available in view-only mode");
         };
@@ -1204,21 +768,10 @@ function updateQuickbar() {
           safeStorageSet({ pinnedFunctions: buttons }, () => {
             updateQuickbar();
             // Update stars in open menus
-            const stars = document.querySelectorAll(".pin-star");
-            stars.forEach((star) => {
+            document.querySelectorAll(".pin-star").forEach((star) => {
               const item = star.closest('[role="menuitem"]');
               const path = getFullMenuPath(item);
-              let flag = false;
-              for (let i = 0; i < buttons.length; i++) {
-                if (buttons[i].includes(path)) {
-                  star.textContent = "⭐";
-                  flag = true;
-                  break;
-                }
-              }
-              if (!flag) {
-                star.textContent = "☆";
-              }
+              star.textContent = buttons.some(b => b.includes(path)) ? "⭐" : "☆";
             });
           });
         };
@@ -1237,15 +790,10 @@ function updateQuickbar() {
     const bar = document.getElementById("quickbar");
     const editButton = bar?.editButton;
     const editContainer = bar?.editContainer;
+    const shouldHide = buttons.length === 0 || titleCollapsed;
 
-    if (editButton) {
-      editButton.style.display =
-        buttons.length === 0 || titleCollapsed ? "none" : "inline-block";
-    }
-    if (editContainer) {
-      editContainer.style.display =
-        buttons.length === 0 || titleCollapsed ? "none" : "inline-block";
-    }
+    if (editButton) editButton.style.display = shouldHide ? "none" : "inline-block";
+    if (editContainer) editContainer.style.display = shouldHide ? "none" : "inline-block";
 
     if (editingMode) enableDragDrop(container, buttons);
   });
@@ -1328,95 +876,27 @@ return [...currentMenuPath, label].join(" > ");
       ));
 
   if (isColorItem) {
-    console.log("Detected color item:", label);
-    console.log("Last clicked color button:", lastClickedColorButton);
-
-    console.log("=== COLOR DETECTION DEBUG ===");
-    console.log("lastClickedColorButton:", lastClickedColorButton);
-
-    let isFromFillColor = false;
-    let isFromTextColor = false;
-
-    if (lastClickedColorButton === "fill") {
-      isFromFillColor = true;
-      console.log("Method 1: Detected FILL from tracked click");
-    } else if (lastClickedColorButton === "text") {
-      isFromTextColor = true;
-      console.log("Method 1: Detected TEXT from tracked click");
-    }
+    let isFromFillColor = lastClickedColorButton === "fill";
+    let isFromTextColor = lastClickedColorButton === "text";
 
     // Method 2: Check BOTH fill and text color buttons for active states
     if (!isFromFillColor && !isFromTextColor) {
-      const fillButtons = Array.from(
-        document.querySelectorAll("*[aria-label], *[data-tooltip], *[title]")
-      ).filter((btn) => {
-        const btnLabel = (
-          btn.getAttribute("aria-label") ||
-          btn.getAttribute("data-tooltip") ||
-          btn.getAttribute("title") ||
-          ""
-        ).toLowerCase();
-        return (
-          btnLabel.includes("fill") ||
-          btnLabel.includes("background") ||
-          btnLabel.includes("cell color")
-        );
+      const allColorButtons = document.querySelectorAll("*[aria-label], *[data-tooltip], *[title]");
+      
+      const fillButtons = Array.from(allColorButtons).filter((btn) => {
+        const btnLabel = getButtonLabel(btn);
+        return btnLabel.includes("fill") || btnLabel.includes("background") || btnLabel.includes("cell color");
       });
 
-      const textButtons = Array.from(
-        document.querySelectorAll("*[aria-label], *[data-tooltip], *[title]")
-      ).filter((btn) => {
-        const btnLabel = (
-          btn.getAttribute("aria-label") ||
-          btn.getAttribute("data-tooltip") ||
-          btn.getAttribute("title") ||
-          ""
-        ).toLowerCase();
-        return (
-          (btnLabel.includes("text") && btnLabel.includes("color")) ||
-          btnLabel.includes("font color")
-        );
+      const textButtons = Array.from(allColorButtons).filter((btn) => {
+        const btnLabel = getButtonLabel(btn);
+        return (btnLabel.includes("text") && btnLabel.includes("color")) || btnLabel.includes("font color");
       });
-
-      console.log(
-        "Checking",
-        fillButtons.length,
-        "fill buttons and",
-        textButtons.length,
-        "text buttons"
-      );
-
+      
       // Check fill buttons
       for (const btn of fillButtons) {
-        const btnLabel = (
-          btn.getAttribute("aria-label") ||
-          btn.getAttribute("data-tooltip") ||
-          btn.getAttribute("title") ||
-          ""
-        ).toLowerCase();
-        const isPressed = btn.getAttribute("aria-pressed") === "true";
-        const isChecked = btn.classList.contains("goog-toolbar-button-checked");
-        const isActive = btn.classList.contains("active");
-        const hasSelectedClass = btn.classList.contains(
-          "goog-toolbar-button-selected"
-        );
-
-        console.log(
-          "Fill button:",
-          btnLabel,
-          "pressed:",
-          isPressed,
-          "checked:",
-          isChecked,
-          "active:",
-          isActive,
-          "selected:",
-          hasSelectedClass
-        );
-
-        if (isPressed || isChecked || isActive || hasSelectedClass) {
+        if (isButtonActive(btn)) {
           isFromFillColor = true;
-          console.log("Method 2: Detected active fill button:", btnLabel);
           break;
         }
       }
@@ -1424,37 +904,8 @@ return [...currentMenuPath, label].join(" > ");
       // Check text buttons (only if fill not active)
       if (!isFromFillColor) {
         for (const btn of textButtons) {
-          const btnLabel = (
-            btn.getAttribute("aria-label") ||
-            btn.getAttribute("data-tooltip") ||
-            btn.getAttribute("title") ||
-            ""
-          ).toLowerCase();
-          const isPressed = btn.getAttribute("aria-pressed") === "true";
-          const isChecked = btn.classList.contains(
-            "goog-toolbar-button-checked"
-          );
-          const isActive = btn.classList.contains("active");
-          const hasSelectedClass = btn.classList.contains(
-            "goog-toolbar-button-selected"
-          );
-
-          console.log(
-            "Text button:",
-            btnLabel,
-            "pressed:",
-            isPressed,
-            "checked:",
-            isChecked,
-            "active:",
-            isActive,
-            "selected:",
-            hasSelectedClass
-          );
-
-          if (isPressed || isChecked || isActive || hasSelectedClass) {
+          if (isButtonActive(btn)) {
             isFromTextColor = true;
-            console.log("Method 2: Detected active text button:", btnLabel);
             break;
           }
         }
@@ -1462,104 +913,26 @@ return [...currentMenuPath, label].join(" > ");
     }
 
     if (!isFromFillColor && !isFromTextColor) {
-      console.log("No clear button state, checking DOM selectors...");
+      const fillColorIndicators = [".docs-icon-fill-color", '[data-command-name*="fill"]', '[data-command-name*="background"]'];
+      const textColorIndicators = [".docs-icon-text-color", '[data-command-name*="text"]', '[aria-label*="Text color"]'];
 
-      const fillColorIndicators = [
-        ".docs-icon-fill-color",
-        '[data-command-name*="fill"]',
-        '[data-command-name*="background"]',
-      ];
-
-      const textColorIndicators = [
-        ".docs-icon-text-color",
-        '[data-command-name*="text"]',
-        '[aria-label*="Text color"]',
-      ];
-
-      for (const selector of fillColorIndicators) {
-        const element = document.querySelector(selector);
-        if (
-          element &&
-          (element.classList.contains("goog-toolbar-button-checked") ||
-            element.getAttribute("aria-pressed") === "true")
-        ) {
-          isFromFillColor = true;
-          console.log("Method 3: Detected fill color via selector:", selector);
-          break;
-        }
-      }
+      isFromFillColor = fillColorIndicators.some(sel => {
+        const el = document.querySelector(sel);
+        return el && isButtonActive(el);
+      });
 
       if (!isFromFillColor) {
-        for (const selector of textColorIndicators) {
-          const element = document.querySelector(selector);
-          if (
-            element &&
-            (element.classList.contains("goog-toolbar-button-checked") ||
-              element.getAttribute("aria-pressed") === "true")
-          ) {
-            isFromTextColor = true;
-            console.log(
-              "Method 3: Detected text color via selector:",
-              selector
-            );
-            break;
-          }
-        }
+        isFromTextColor = textColorIndicators.some(sel => {
+          const el = document.querySelector(sel);
+          return el && isButtonActive(el);
+        });
       }
     }
 
-    // FINAL DECISION with proper priority
-    if (isFromTextColor && !isFromFillColor) {
-      console.log("=== SAVING AS TEXT COLOR ===");
-      return `Text color > ${label}`;
-    } else if (isFromFillColor && !isFromTextColor) {
-      console.log("=== SAVING AS FILL COLOR ===");
-      return `Fill color > ${label}`;
-    } else if (isFromTextColor && isFromFillColor) {
-      // Both detected - use tracking as tiebreaker
-      if (lastClickedColorButton === "text") {
-        console.log("=== BOTH DETECTED - USING TEXT FROM TRACKING ===");
-        return `Text color > ${label}`;
-      } else if (lastClickedColorButton === "fill") {
-        console.log("=== BOTH DETECTED - USING FILL FROM TRACKING ===");
-        return `Fill color > ${label}`;
-      } else {
-        console.log("=== BOTH DETECTED - DEFAULTING TO TEXT ===");
-        return `Text color > ${label}`;
-      }
-    } else {
-      // Neither clearly detected - default to text
-      console.log("=== NO CLEAR DETECTION - DEFAULTING TO TEXT ===");
-      return `Text color > ${label}`;
-    }
-
-    // Fallback: try to detect from DOM state
-    const activeFillColorBtn = document.querySelector(
-      '[aria-label*="Fill"][aria-label*="color"], [aria-label*="Fill"][aria-label*="colour"], [aria-label*="Background"][aria-label*="color"]'
-    );
-    const activeTextColorBtn = document.querySelector(
-      '[aria-label*="Text"][aria-label*="color"], [aria-label*="Text"][aria-label*="colour"]'
-    );
-
-    // Check which one appears to be in an active state
-    if (
-      activeFillColorBtn &&
-      (activeFillColorBtn.getAttribute("aria-pressed") === "true" ||
-        activeFillColorBtn.classList.contains("goog-toolbar-button-checked"))
-    ) {
-      console.log("Pinning as Fill color based on DOM state:", label);
-      return `Fill color > ${label}`;
-    } else if (
-      activeTextColorBtn &&
-      (activeTextColorBtn.getAttribute("aria-pressed") === "true" ||
-        activeTextColorBtn.classList.contains("goog-toolbar-button-checked"))
-    ) {
-      console.log("Pinning as Text color based on DOM state:", label);
-      return `Text color > ${label}`;
-    }
-
-    // Final fallback: default to text color
-    console.log("No reliable color type detection, defaulting to text color");
+    // FINAL DECISION: Fill > Text > lastClicked > default Text
+    if (isFromFillColor) return `Fill color > ${label}`;
+    if (isFromTextColor) return `Text color > ${label}`;
+    if (lastClickedColorButton === "fill") return `Fill color > ${label}`;
     return `Text color > ${label}`;
   }
 
@@ -1636,14 +1009,10 @@ function injectStarsIntoMenu(menu) {
 // Setup function on load
 // Track color button clicks
 function trackColorButtonClicks() {
-  console.log("=== TRACKING COLOR BUTTONS ===");
-
   // Add click listeners to ALL buttons, not just color ones
   const allButtons = document.querySelectorAll(
     'button, div[role="button"], span[role="button"], *[onclick], *[aria-label], *[data-tooltip]'
   );
-  console.log("Found", allButtons.length, "potential buttons to track");
-
   let trackedCount = 0;
 
   allButtons.forEach((button) => {
@@ -1666,28 +1035,19 @@ function trackColorButtonClicks() {
       ) {
         button.setAttribute("data-color-tracked", "true");
         trackedCount++;
-
-        console.log("Tracking button:", label.substring(0, 50));
-
         button.addEventListener("click", (e) => {
-          console.log("=== BUTTON CLICKED ===");
-          console.log("Button label:", label);
-
           if (
             label.includes("fill") ||
             label.includes("background") ||
             label.includes("cell color")
           ) {
             lastClickedColorButton = "fill";
-            console.log(">>> TRACKED FILL COLOR BUTTON CLICK <<<");
           } else if (label.includes("text") || label.includes("font")) {
             lastClickedColorButton = "text";
-            console.log(">>> TRACKED TEXT COLOR BUTTON CLICK <<<");
           }
 
           setTimeout(() => {
             if (lastClickedColorButton) {
-              console.log("Clearing color button tracking after 30 seconds");
               lastClickedColorButton = null;
             }
           }, 30000);
@@ -1695,8 +1055,6 @@ function trackColorButtonClicks() {
       }
     }
   });
-
-  console.log("Tracked", trackedCount, "color-related buttons");
 }
 
 function cleanupObservers() {
@@ -1843,24 +1201,17 @@ function createToolbar() {
   // Check if toolbar already exists and remove it to prevent duplicates
   const existingBar = document.getElementById("quickbar");
   if (existingBar) {
-    console.log("Removing existing StarBar to prevent duplicates");
     existingBar.remove();
   }
   
   // Also check for any orphaned starbars without proper ID (safety net)
   const orphanedBars = document.querySelectorAll('[alt="StarBar"]');
-  if (orphanedBars.length > 0) {
-    console.log(`Found ${orphanedBars.length} StarBar elements, cleaning up duplicates...`);
-  }
   orphanedBars.forEach((orphan, index) => {
     const parentBar = orphan.closest('div');
     if (parentBar && parentBar.id !== 'quickbar') {
-      console.log(`Removing orphaned StarBar ${index + 1}`);
       parentBar.remove();
     }
   });
-
-  console.log("Creating new StarBar...");
   const bar = document.createElement("div");
   bar.id = "quickbar";
   bar.style.position = "fixed";
@@ -1999,7 +1350,6 @@ editButton.title = "Edit";
   
   // Auto-minimize starbar for view-only sheets
   if (isViewOnlySheet) {
-    console.log("Auto-minimizing starbar for view-only sheet");
     titleCollapsed = true;
     
     Array.from(bar.children).forEach((child) => {
@@ -2049,27 +1399,10 @@ function makeDraggable(handle, target) {
 
 // Setup hotkey functionality for starBar functions
 function setupHotkeys() {
-  console.log("StarBar: Setting up hotkeys");
-  
   // Mac detection - declare once at function scope
   const isMac = isMacPlatform();
-  console.log(`StarBar: Platform detected as Mac: ${isMac}`);
-  
   // Use capture phase to intercept events before Google Sheets can handle them
   document.addEventListener("keydown", (e) => {
-    // Log all keydown events for debugging (only when modifier keys are involved)
-    if (e.altKey || e.shiftKey || e.ctrlKey || e.metaKey) {
-      console.log(`StarBar hotkey check: Key=${e.key}, Code=${e.code}, Alt=${e.altKey}, Shift=${e.shiftKey}, Ctrl=${e.ctrlKey}, Meta=${e.metaKey}, Platform=${navigator.platform}, IsMac=${isMac}`);
-      console.log(`StarBar active element:`, document.activeElement);
-      console.log(`StarBar active element tag:`, document.activeElement?.tagName);
-      console.log(`StarBar active element class:`, document.activeElement?.className);
-      
-      // Mac-specific debugging for Command+Option combinations
-      if (isMac && e.metaKey && e.altKey) {
-        console.log(`StarBar: Mac Command+Option detected with key: ${e.key}, preventDefault will be called`);
-      }
-    }
-    
     // More comprehensive check for input/editable elements in Google Sheets
     const activeElement = document.activeElement;
     const isInInputField = activeElement && (
@@ -2089,7 +1422,6 @@ function setupHotkeys() {
     );
     
     if (isInInputField) {
-      console.log("StarBar: Hotkey ignored - typing in input field or Google Sheets editor");
       return;
     }
     
@@ -2116,8 +1448,6 @@ function setupHotkeys() {
       
       // Only process if we have a valid letter key (not just modifier keys)
       if (keyCode.startsWith('key') || ['z', 'x', 's', 'ω', '≈', 'ß'].includes(keyChar)) {
-        console.log(`StarBar: Primary hotkey detected with key: ${e.key}, code: ${e.code}`);
-        
         // Check both e.key and e.code for compatibility
         if (keyCode === 'keyz' || keyChar === 'z' || keyChar === 'ω') {
           isHotkeyPressed = true;
@@ -2139,7 +1469,6 @@ function setupHotkeys() {
     const isAltShift = (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey);
     
     if (isAltShift && !isHotkeyPressed) {
-      console.log(`StarBar: Alt+Shift detected with key: ${e.key}, code: ${e.code}`);
       const keyCode = e.code.toLowerCase();
       const keyChar = e.key.toLowerCase();
       
@@ -2172,9 +1501,6 @@ function setupHotkeys() {
           e.preventDefault();
         }
       }
-      
-      console.log(`StarBar: Hotkey ${hotkeyDisplay} detected, executing immediately (Mac: ${isMac})`);
-      
       // Execute immediately without waiting for storage
       executeHotkeyAction(functionIndex, hotkeyDisplay);
       
@@ -2192,20 +1518,10 @@ function setupHotkeys() {
 // Mac hotkey test function - can be called from browser console
 window.starBarMacTest = function() {
   const isMac = isMacPlatform();
-  console.log(`StarBar Mac Test: Running on Mac: ${isMac}`);
-  console.log(`StarBar Mac Test: Platform: ${navigator.platform}`);
-  console.log(`StarBar Mac Test: UserAgent: ${navigator.userAgent}`);
-  
   if (!isMac) {
-    console.log("StarBar Mac Test: Not running on Mac, test not applicable");
     showHotkeyFeedback("Test: Not on Mac platform");
     return;
   }
-  
-  console.log("StarBar Mac Test: Mac detected, hotkeys should work with:");
-  console.log("- Command+Option+Z/X/S (primary)");
-  console.log("- Option+Shift+Z/X/S (fallback)");
-  
   showHotkeyFeedback("Mac Test: Ready! Try ⌘⌥Z/X/S");
   
   return {
@@ -2217,27 +1533,19 @@ window.starBarMacTest = function() {
 
 // Test function for debugging - can be called from browser console
 window.starBarTest = function(functionIndex = 0) {
-  console.log(`StarBar Test: Manually triggering function ${functionIndex + 1}`);
-  
   safeStorageGet("pinnedFunctions", (data) => {
     const buttons = data.pinnedFunctions || [];
-    console.log(`StarBar Test: Found ${buttons.length} pinned functions:`, buttons);
-    
     if (buttons.length === 0) {
-      console.log("StarBar Test: No pinned functions available");
       showHotkeyFeedback("Test: No functions saved");
       return;
     }
     
     if (functionIndex >= buttons.length) {
-      console.log(`StarBar Test: Function ${functionIndex + 1} not available, only ${buttons.length} functions saved`);
       showHotkeyFeedback(`Test: Function ${functionIndex + 1} not available`);
       return;
     }
     
     const functionPath = buttons[functionIndex];
-    console.log(`StarBar Test: Triggering function ${functionIndex + 1}:`, functionPath);
-    
     showHotkeyFeedback(`Test: ${functionPath.split(" > ").pop()}`);
     triggerMenuPath(functionPath);
   });
@@ -2245,8 +1553,6 @@ window.starBarTest = function(functionIndex = 0) {
 
 // Alternative hotkey system using document.addEventListener with different options
 function setupAlternativeHotkeys() {
-  console.log("StarBar: Setting up alternative hotkey system");
-  
   // Add event listener to window as well as document
   const handleKeyEvent = (e) => {
     // Only process if we have a letter key, not just modifier keys
@@ -2257,8 +1563,6 @@ function setupAlternativeHotkeys() {
     if (!isLetterKey) return;
     
     if (e.altKey || e.shiftKey || e.ctrlKey || e.metaKey) {
-      console.log(`StarBar ALT hotkey: Key=${e.key}, Alt=${e.altKey}, Shift=${e.shiftKey}, Ctrl=${e.ctrlKey}, Meta=${e.metaKey}`);
-      
       // Check for primary hotkeys - Ctrl+Alt on Win/Linux, Cmd+Option on Mac
       const isMac = isMacPlatform();
       const isPrimaryHotkey = isMac ? 
@@ -2278,7 +1582,6 @@ function setupAlternativeHotkeys() {
         }
         
         if (functionIndex >= 0) {
-          console.log(`StarBar ALT: Primary hotkey ${e.key.toUpperCase()} detected`);
           e.preventDefault();
           e.stopPropagation();
           e.stopImmediatePropagation();
@@ -2298,28 +1601,20 @@ function setupAlternativeHotkeys() {
   document.body.addEventListener('keydown', handleKeyEvent, true);
 }
 function executeHotkeyAction(functionIndex, hotkeyDisplay) {
-  console.log(`StarBar: Executing hotkey action for function ${functionIndex + 1}`);
-  
   // Get the pinned functions
   safeStorageGet("pinnedFunctions", (data) => {
     const buttons = data.pinnedFunctions || [];
-    console.log(`StarBar: Found ${buttons.length} pinned functions:`, buttons);
-    
     if (buttons.length === 0) {
-      console.log("StarBar: No pinned functions available for hotkey");
       showHotkeyFeedback(`${hotkeyDisplay}: No functions saved`);
       return;
     }
     
     if (functionIndex >= buttons.length) {
-      console.log(`StarBar: Function ${functionIndex + 1} not available, only ${buttons.length} functions saved`);
       showHotkeyFeedback(`${hotkeyDisplay}: Function ${functionIndex + 1} not available`);
       return;
     }
     
     const functionPath = buttons[functionIndex];
-    console.log(`StarBar: Hotkey ${hotkeyDisplay} triggered for function ${functionIndex + 1}:`, functionPath);
-    
     // Show a brief visual feedback
     showHotkeyFeedback(`${hotkeyDisplay}: ${functionPath.split(" > ").pop()}`);
     
@@ -2382,24 +1677,19 @@ function init() {
                      !currentUrl.includes('/d/'); // Any sheets URL without '/d/' is likely the home page
   
   if (isHomePage) {
-    console.log('StarFlo: Detected Google Sheets home page, not showing startbar');
     return;}
 
   // Detect if this is a view-only sheet with retry mechanism
   const detectWithRetry = (attempt = 1, maxAttempts = 5) => {
     isViewOnlySheet = detectViewOnlySheet();
-    console.log(`Sheet view-only detection attempt ${attempt}:`, isViewOnlySheet);
-    
     // If we haven't detected view-only yet and there are more attempts, try again
     if (!isViewOnlySheet && attempt < maxAttempts) {
       setTimeout(() => detectWithRetry(attempt + 1, maxAttempts), 1000 * attempt);
     } else {
-      console.log("Final view-only status:", isViewOnlySheet);
       // Update the toolbar if it was already created and we now detect view-only
       if (isViewOnlySheet && attempt > 1) {
         const bar = document.getElementById("quickbar");
         if (bar) {
-          console.log("Updating existing toolbar for view-only mode");
           const titleBar = bar.querySelector("div:first-child");
           const title = titleBar?.querySelector("img");
           
@@ -2437,44 +1727,32 @@ function init() {
 
   // Check if user has seen onboarding and start tour if needed
   chrome.storage.local.get(['hasSeenOnboarding'], (result) => {
-    console.log('StarBar: Checking onboarding status:', result);
-    
     if (!result.hasSeenOnboarding) {
-      console.log('StarBar: User has not seen onboarding, will start tour');
-      
       // Wait for:
       // 1. Toolbar to be fully created
       // 2. Google Sheets interface to be ready
       // 3. intro.js library to be loaded
       setTimeout(() => {
-        console.log('StarBar: Attempting to start onboarding tour');
-        
         // Check if intro.js is loaded
         if (typeof introJs === 'undefined') {
-          console.error('StarBar: intro.js library not loaded!');
           return;
         }
         
         // Check if onboarding function exists
         if (typeof window.startOnboardingTour !== 'function') {
-          console.error('StarBar: startOnboardingTour function not found!');
           return;
         }
         
         // Check if quickbar exists
         const quickbar = document.getElementById('quickbar');
         if (!quickbar) {
-          console.error('StarBar: Quickbar not found, cannot start tour');
           return;
         }
         
         // All checks passed - start the tour!
-        console.log('StarBar: Starting onboarding tour now');
         window.startOnboardingTour();
         
       }, 2000); // Wait 2 seconds for everything to be ready
-    } else {
-      console.log('StarBar: User has already seen onboarding');
     }
   });
 
@@ -2563,7 +1841,6 @@ let colorTrackingObserver = new MutationObserver((mutations) => {
   });
 
   if (shouldRetrack) {
-    console.log("DOM changed, re-tracking color buttons...");
     setTimeout(trackColorButtonClicks, 500);
   }
 });
@@ -2593,126 +1870,46 @@ window.addEventListener("contextmenu", (e) => {
   const label =
     target.getAttribute("aria-label") || target.getAttribute("title");
   if (!label) return;
-
-  console.log("=== RIGHT-CLICK CONTEXT MENU ===");
-  console.log("Color label:", label);
-
   // ENHANCED DETECTION FOR RIGHT-CLICK CONTEXT
   let prefix = "Text color"; // Default fallback
   let isFromFillColor = false;
   let isFromTextColor = false;
 
   // Method 1: Check BOTH fill and text color buttons to see which is active
-  const fillColorButtons = Array.from(
-    document.querySelectorAll("*[aria-label], *[data-tooltip], *[title]")
-  ).filter((btn) => {
-    const btnLabel = (
-      btn.getAttribute("aria-label") ||
-      btn.getAttribute("data-tooltip") ||
-      btn.getAttribute("title") ||
-      ""
-    ).toLowerCase();
-    return (
-      btnLabel.includes("fill") ||
-      btnLabel.includes("background") ||
-      btnLabel.includes("cell color")
-    );
+  const allColorButtons = document.querySelectorAll("*[aria-label], *[data-tooltip], *[title]");
+  
+  const fillColorButtons = Array.from(allColorButtons).filter((btn) => {
+    const btnLabel = getButtonLabel(btn);
+    return btnLabel.includes("fill") || btnLabel.includes("background") || btnLabel.includes("cell color");
   });
 
-  const textColorButtons = Array.from(
-    document.querySelectorAll("*[aria-label], *[data-tooltip], *[title]")
-  ).filter((btn) => {
-    const btnLabel = (
-      btn.getAttribute("aria-label") ||
-      btn.getAttribute("data-tooltip") ||
-      btn.getAttribute("title") ||
-      ""
-    ).toLowerCase();
-    return (
-      (btnLabel.includes("text") && btnLabel.includes("color")) ||
-      btnLabel.includes("font color")
-    );
+  const textColorButtons = Array.from(allColorButtons).filter((btn) => {
+    const btnLabel = getButtonLabel(btn);
+    return (btnLabel.includes("text") && btnLabel.includes("color")) || btnLabel.includes("font color");
   });
-
-  console.log(
-    "Found",
-    fillColorButtons.length,
-    "fill color buttons and",
-    textColorButtons.length,
-    "text color buttons"
-  );
-
   // Check fill color buttons
   for (const btn of fillColorButtons) {
-    const isPressed = btn.getAttribute("aria-pressed") === "true";
-    const isChecked = btn.classList.contains("goog-toolbar-button-checked");
-    const isActive = btn.classList.contains("active");
-    const hasSelectedClass = btn.classList.contains(
-      "goog-toolbar-button-selected"
-    );
-
-    console.log(
-      "Fill button check:",
-      btn.getAttribute("aria-label"),
-      "pressed:",
-      isPressed,
-      "checked:",
-      isChecked,
-      "active:",
-      isActive
-    );
-
-    if (isPressed || isChecked || isActive || hasSelectedClass) {
+    if (isButtonActive(btn)) {
       isFromFillColor = true;
-      console.log(
-        "Context menu: Detected active fill button:",
-        btn.getAttribute("aria-label")
-      );
       break;
     }
   }
 
   // Check text color buttons
   for (const btn of textColorButtons) {
-    const isPressed = btn.getAttribute("aria-pressed") === "true";
-    const isChecked = btn.classList.contains("goog-toolbar-button-checked");
-    const isActive = btn.classList.contains("active");
-    const hasSelectedClass = btn.classList.contains(
-      "goog-toolbar-button-selected"
-    );
-
-    console.log(
-      "Text button check:",
-      btn.getAttribute("aria-label"),
-      "pressed:",
-      isPressed,
-      "checked:",
-      isChecked,
-      "active:",
-      isActive
-    );
-
-    if (isPressed || isChecked || isActive || hasSelectedClass) {
+    if (isButtonActive(btn)) {
       isFromTextColor = true;
-      console.log(
-        "Context menu: Detected active text button:",
-        btn.getAttribute("aria-label")
-      );
       break;
     }
   }
 
   if (lastClickedColorButton === "fill" && !isFromTextColor) {
     isFromFillColor = true;
-    console.log("Context menu: Using recent button tracking for fill");
   } else if (lastClickedColorButton === "text" && !isFromFillColor) {
     isFromTextColor = true;
-    console.log("Context menu: Using recent button tracking for text");
   }
 
   if (!isFromFillColor && !isFromTextColor) {
-    console.log("No clear button state detected, checking DOM context...");
-
     const fillColorIndicators = [
       ".docs-icon-fill-color",
       '[data-command-name*="fill"]',
@@ -2734,10 +1931,6 @@ window.addEventListener("contextmenu", (e) => {
           element.getAttribute("aria-pressed") === "true")
       ) {
         isFromFillColor = true;
-        console.log(
-          "Context menu: Detected fill color via selector:",
-          selector
-        );
         break;
       }
     }
@@ -2752,10 +1945,6 @@ window.addEventListener("contextmenu", (e) => {
             element.getAttribute("aria-pressed") === "true")
         ) {
           isFromTextColor = true;
-          console.log(
-            "Context menu: Detected text color via selector:",
-            selector
-          );
           break;
         }
       }
@@ -2764,37 +1953,23 @@ window.addEventListener("contextmenu", (e) => {
 
   if (isFromTextColor && !isFromFillColor) {
     prefix = "Text color";
-    console.log("=== CONTEXT MENU: DETERMINED TEXT COLOR ===");
   } else if (isFromFillColor && !isFromTextColor) {
     prefix = "Fill color";
-    console.log("=== CONTEXT MENU: DETERMINED FILL COLOR ===");
   } else if (isFromTextColor && isFromFillColor) {
     // Both detected - use recent tracking as tiebreaker
     if (lastClickedColorButton === "text") {
       prefix = "Text color";
-      console.log(
-        "=== CONTEXT MENU: BOTH DETECTED - USING TEXT FROM TRACKING ==="
-      );
     } else if (lastClickedColorButton === "fill") {
       prefix = "Fill color";
-      console.log(
-        "=== CONTEXT MENU: BOTH DETECTED - USING FILL FROM TRACKING ==="
-      );
     } else {
       // Default to text color when unsure
       prefix = "Text color";
-      console.log("=== CONTEXT MENU: BOTH DETECTED - DEFAULTING TO TEXT ===");
     }
   } else {
     prefix = "Text color";
-    console.log(
-      "=== CONTEXT MENU: NO CLEAR DETECTION - DEFAULTING TO TEXT ==="
-    );
   }
 
   const path = `${prefix} > ${label}`;
-  console.log("Context menu final path:", path);
-
   safeStorageGet(["pinnedFunctions"], (data) => {
     const pins = data.pinnedFunctions || [];
     if (!pins.includes(path)) {
