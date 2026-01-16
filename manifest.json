@@ -28,7 +28,17 @@
   "content_scripts": [
     {
       "matches": ["https://docs.google.com/spreadsheets/*"],
-      "js": ["intro.js", "content.js", "onboarding.js"],
+      "js": [
+        "intro.js",
+        "src/utils.js",
+        "src/dom-helpers.js",
+        "src/menu-navigation.js",
+        "src/quickbar.js",
+        "src/hotkeys.js",
+        "src/observers.js",
+        "src/main.js",
+        "onboarding.js"
+      ],
       "css": ["intro.css", "styles.css"]
     }
   ],
@@ -43,7 +53,14 @@
         "A.svg",
         "fill.svg",
         "intro.js",
-        "intro.css"
+        "intro.css",
+        "src/utils.js",
+        "src/dom-helpers.js",
+        "src/menu-navigation.js",
+        "src/quickbar.js",
+        "src/hotkeys.js",
+        "src/observers.js",
+        "src/main.js"
       ],
       "matches": ["<all_urls>"]
     }
